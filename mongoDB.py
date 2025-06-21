@@ -9,7 +9,7 @@ from datetime import datetime
 load_dotenv()
 
 class MongoDBManager:
-    def __init__(self, connection_string=None, database_name="spotilike", collection_name="users"):
+    def __init__(self, connection_string=None, database_name="spotilike", collection_name="tracks"):
         """
         Initialize MongoDB connection
         
@@ -61,10 +61,6 @@ class MongoDBManager:
             ObjectId: ID of the inserted document
         """
         try:
-            # Add timestamp if not present
-            if 'created_at' not in document:
-                document['created_at'] = datetime.utcnow()
-            
             result = self.collection.insert_one(document)
             print(f"✅ Document inserted with ID: {result.inserted_id}")
             return result.inserted_id
@@ -83,11 +79,6 @@ class MongoDBManager:
             list: List of inserted document IDs
         """
         try:
-            # Add timestamp to each document if not present
-            for doc in documents:
-                if 'created_at' not in doc:
-                    doc['created_at'] = datetime.utcnow()
-            
             result = self.collection.insert_many(documents)
             print(f"✅ {len(result.inserted_ids)} documents inserted")
             return result.inserted_ids
@@ -157,12 +148,9 @@ class MongoDBManager:
             bool: Success status
         """
         try:
-            # Add updated timestamp
-            update_data['updated_at'] = datetime.utcnow()
-            
             result = self.collection.update_one(
                 filter_query,
-                {'$set': update_data},
+                update_data,
                 upsert=upsert
             )
             
@@ -190,12 +178,9 @@ class MongoDBManager:
             bool: Success status
         """
         try:
-            # Add updated timestamp
-            update_data['updated_at'] = datetime.utcnow()
-            
             result = self.collection.update_many(
                 filter_query,
-                {'$set': update_data}
+                update_data
             )
             
             print(f"✅ Updated {result.modified_count} document(s)")
@@ -271,77 +256,101 @@ class MongoDBManager:
             print(f"❌ Error dropping collection: {e}")
             return False
 
+    def update_track_score(self, track_id, score_change):
+        """
+        Updates the score for a track.
+        If the track doesn't exist, it's created with the initial score.
+
+        Args:
+            track_id (str): The ID of the track.
+            score_change (int): +1 for a happy vote, -1 for a sad vote.
+        """
+        if score_change not in [1, -1]:
+            print("❌ Invalid score_change value. Must be 1 or -1.")
+            return False
+            
+        try:
+            query = {'track_id': track_id}
+            # Use $inc to increment/decrement the score.
+            # $setOnInsert sets values only when a new document is created.
+            update = {
+                '$inc': {'score': score_change},
+            }
+            
+            result = self.collection.update_one(query, update, upsert=True)
+            
+            if result.upserted_id:
+                print(f"✅ Created new track '{track_id}' with score: {score_change}")
+            elif result.modified_count > 0:
+                print(f"✅ Updated score for track '{track_id}'.")
+            else:
+                 print(f"ℹ️ No change for track '{track_id}'.")
+
+            return True
+        except Exception as e:
+            print(f"❌ Error updating track score: {e}")
+            return False
+
 def main():
-    """Example usage of MongoDB operations"""
+    """Example usage of the track score update functionality"""
     
-    # Initialize MongoDB manager with your actual connection string
+    # IMPORTANT: Create a .env file in your project root and add your MongoDB connection string:
+    # MONGODB_URI="your_mongodb_connection_string"
     connection_string = os.getenv('MONGODB_URI')
-    
+    if not connection_string:
+        print("❌ MONGODB_URI environment variable not set. Please set it in a .env file.")
+        return
+
     try:
-        # Create MongoDB manager instance
-        mongo_manager = MongoDBManager(connection_string, "spotilike", "users")
+        # Initialize with the 'tracks' collection
+        mongo_manager = MongoDBManager(connection_string, "spotilike", "tracks")
         
-        # Connect to MongoDB
         if not mongo_manager.connect():
             return
+
+        # Drop the collection for a clean test run
+        print("\n=== DROPPING COLLECTION FOR A FRESH START ===")
+        mongo_manager.drop_collection()
+
+        print("\n=== UPDATING TRACK SCORES ===")
         
-        # Example operations
+        # Example Track IDs from Spotify
+        track_id_1 = "4cOdK2wGLETOMsV3g9B1rA"  # "Blinding Lights" by The Weeknd
+        track_id_2 = "0e7ipj03S05BNilyu5bRzt"  # "As It Was" by Harry Styles
         
-        # 1. Insert a single document
-        print("\n=== INSERTING SINGLE DOCUMENT ===")
-        user_doc = {
-            "name": "John Doe",
-            "email": "john@example.com",
-            "age": 30,
-            "preferences": ["rock", "jazz", "classical"]
-        }
-        mongo_manager.insert_one(user_doc)
+        # --- Scenario 1: A user likes a song for the first time ---
+        print(f"\n1. User is HAPPY with song: {track_id_1}")
+        mongo_manager.update_track_score(track_id_1, 1)  # Happy +1
         
-        # 2. Insert multiple documents
-        print("\n=== INSERTING MULTIPLE DOCUMENTS ===")
-        users = [
-            {"name": "Jane Smith", "email": "jane@example.com", "age": 25, "preferences": ["pop", "electronic"]},
-            {"name": "Bob Johnson", "email": "bob@example.com", "age": 35, "preferences": ["country", "folk"]},
-            {"name": "Alice Brown", "email": "alice@example.com", "age": 28, "preferences": ["hip-hop", "r&b"]}
-        ]
-        mongo_manager.insert_many(users)
+        # --- Scenario 2: Another user likes the same song ---
+        print(f"\n2. Another user is HAPPY with song: {track_id_1}")
+        mongo_manager.update_track_score(track_id_1, 1)  # Happy +1
         
-        # 3. Find documents
-        print("\n=== FINDING DOCUMENTS ===")
-        # Find one document
-        mongo_manager.find_one({"name": "John Doe"})
+        # --- Scenario 3: A user dislikes the same song ---
+        print(f"\n3. A user is UNHAPPY with song: {track_id_1}")
+        mongo_manager.update_track_score(track_id_1, -1) # Unhappy -1
         
-        # Find all documents
-        all_users = mongo_manager.find_many()
+        # --- Scenario 4: A user likes a different song ---
+        print(f"\n4. User is HAPPY with song: {track_id_2}")
+        mongo_manager.update_track_score(track_id_2, 1)  # Happy +1
         
-        # Find documents with filter
-        young_users = mongo_manager.find_many({"age": {"$lt": 30}})
+        # --- Scenario 5: A user dislikes that different song ---
+        print(f"\n5. User is UNHAPPY with song: {track_id_2}")
+        mongo_manager.update_track_score(track_id_2, -1) # Unhappy -1
         
-        # 4. Update documents
-        print("\n=== UPDATING DOCUMENTS ===")
-        mongo_manager.update_one(
-            {"name": "John Doe"},
-            {"age": 31, "preferences": ["rock", "jazz", "classical", "blues"]}
-        )
-        
-        # 5. Count documents
-        print("\n=== COUNTING DOCUMENTS ===")
-        mongo_manager.count_documents()
-        
-        # 6. Delete documents
-        print("\n=== DELETING DOCUMENTS ===")
-        mongo_manager.delete_one({"name": "Alice Brown"})
-        
-        # 7. Find updated documents
-        print("\n=== FINDING UPDATED DOCUMENTS ===")
-        mongo_manager.find_many(sort_by=("created_at", -1))
-        
+        # --- Scenario 6: Let's see the results ---
+        print("\n=== FINAL TRACK SCORES ===")
+        all_tracks = mongo_manager.find_many(sort_by=("score", -1)) # Sort by score descending
+        if all_tracks:
+            # Using json.dumps for pretty printing BSON/ObjectId
+            print(json.dumps(all_tracks, indent=2, default=str))
+
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"❌ An error occurred in main: {e}")
     
     finally:
         # Disconnect from MongoDB
-        if 'mongo_manager' in locals():
+        if 'mongo_manager' in locals() and mongo_manager.client:
             mongo_manager.disconnect()
 
 if __name__ == "__main__":
