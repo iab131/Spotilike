@@ -8,3 +8,5 @@ numpy
 matplotlib
 tf-keras
 pymongo
+google-generativeai
+pip install -q -U google-genai

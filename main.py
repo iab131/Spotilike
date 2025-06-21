@@ -40,7 +40,7 @@ def auth():
         client_id=client_id,
         client_secret=client_secret,
         redirect_uri='https://linhong.dev',
-        scope='user-read-playback-state playlist-modify-public playlist-modify-private'
+        scope='user-read-playback-state user-modify-playback-state playlist-modify-public playlist-modify-private streaming'
     ))
 
     
