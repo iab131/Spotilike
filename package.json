@@ -1,0 +1,11 @@
+{
+  "name": "spotilike-root",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["front end"],
+  "scripts": {
+    "dev": "cd \"front end\" && npm run dev",
+    "build": "cd \"front end\" && npm run build",
+    "start": "cd \"front end\" && npm run start"
+  }
+}
