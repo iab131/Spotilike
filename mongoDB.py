@@ -256,14 +256,15 @@ class MongoDBManager:
             print(f"❌ Error dropping collection: {e}")
             return False
 
-    def update_track_score(self, track_id, score_change):
+    def update_track_score(self, track_id, score_change, emotion):
         """
         Updates the score for a track.
-        If the track doesn't exist, it's created with the initial score.
+        If the track doesn't exist, it's created with the initial score and emotion.
 
         Args:
             track_id (str): The ID of the track.
             score_change (int): +1 for a happy vote, -1 for a sad vote.
+            emotion (str): The emotion to associate with the track on creation.
         """
         if score_change not in [1, -1]:
             print("❌ Invalid score_change value. Must be 1 or -1.")
@@ -275,12 +276,13 @@ class MongoDBManager:
             # $setOnInsert sets values only when a new document is created.
             update = {
                 '$inc': {'score': score_change},
+                '$setOnInsert': {'emotion': emotion}
             }
             
             result = self.collection.update_one(query, update, upsert=True)
             
             if result.upserted_id:
-                print(f"✅ Created new track '{track_id}' with score: {score_change}")
+                print(f"✅ Created new track '{track_id}' with score: {score_change} and emotion: {emotion}")
             elif result.modified_count > 0:
                 print(f"✅ Updated score for track '{track_id}'.")
             else:
@@ -320,23 +322,23 @@ def main():
         
         # --- Scenario 1: A user likes a song for the first time ---
         print(f"\n1. User is HAPPY with song: {track_id_1}")
-        mongo_manager.update_track_score(track_id_1, 1)  # Happy +1
+        mongo_manager.update_track_score(track_id_1, 1, "happy")  # Happy +1
         
         # --- Scenario 2: Another user likes the same song ---
         print(f"\n2. Another user is HAPPY with song: {track_id_1}")
-        mongo_manager.update_track_score(track_id_1, 1)  # Happy +1
+        mongo_manager.update_track_score(track_id_1, 1, "happy")  # Happy +1
         
         # --- Scenario 3: A user dislikes the same song ---
         print(f"\n3. A user is UNHAPPY with song: {track_id_1}")
-        mongo_manager.update_track_score(track_id_1, -1) # Unhappy -1
+        mongo_manager.update_track_score(track_id_1, -1, "sad") # Unhappy -1
         
         # --- Scenario 4: A user likes a different song ---
         print(f"\n4. User is HAPPY with song: {track_id_2}")
-        mongo_manager.update_track_score(track_id_2, 1)  # Happy +1
+        mongo_manager.update_track_score(track_id_2, 1, "happy")  # Happy +1
         
         # --- Scenario 5: A user dislikes that different song ---
         print(f"\n5. User is UNHAPPY with song: {track_id_2}")
-        mongo_manager.update_track_score(track_id_2, -1) # Unhappy -1
+        mongo_manager.update_track_score(track_id_2, -1, "sad") # Unhappy -1
         
         # --- Scenario 6: Let's see the results ---
         print("\n=== FINAL TRACK SCORES ===")

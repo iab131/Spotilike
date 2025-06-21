@@ -21,8 +21,8 @@ webcam_active = False
 webcam_thread = None
 current_emotion = None
 emotion_lock = threading.Lock()
-positive_emotions = ['happy', 'surprise']
-negative_emotions = ['angry', 'disgust', 'fear', 'sad']
+positive_emotions = ['happy']
+negative_emotions = ['angry', 'disgust', 'sad']
 neutral_emotions = ['neutral']
 
 def auth():
@@ -122,9 +122,9 @@ def initDB():
         return None
     return mongo_manager
 
-def addDB(track_id, score):
+def addDB(track_id, score, emotion="neutral"):
     if mongo_manager:
-        mongo_manager.update_track_score(track_id, score)
+        mongo_manager.update_track_score(track_id, score, emotion)
 
 def start_webcam():
     """Start the webcam and emotion detection in a separate thread"""
@@ -177,8 +177,10 @@ def webcam_emotion_detection():
                     # Extract the dominant emotion
                     if isinstance(result, list) and len(result) > 0:
                         detected_emotion = result[0].get('dominant_emotion', 'neutral')
-                    else:
+                    elif isinstance(result, dict):
                         detected_emotion = result.get('dominant_emotion', 'neutral')
+                    else:
+                        detected_emotion = 'neutral'
                     
                     # Update current emotion with thread safety
                     with emotion_lock:
@@ -223,52 +225,49 @@ def runModel():
         return "neutral"
 
 def main():
+    global current_emotion
     if not initDB():
         print("Failed to initialize database connection. Exiting.")
         return
     
-    print("Starting Spotilike with facial emotion detection...")
-    print("Starting webcam for emotion detection...")
     start_webcam()
-    
+
     try:
         while True:
             try:
                 sp = auth()
-                current_track_id = getCurr(sp)
-                
-                if current_track_id:
-                    # Get emotional response to the song
-                    emotion_response = runModel()
-                    print(f"Track ID: {current_track_id} | Emotional response: {emotion_response}")
+                curr = getCurr(sp)
+
+                if curr is not None:
+                    # Get the latest emotion from the webcam thread
+                    emotion = get_current_emotion()
                     
-                    # Update database based on emotional response
-                    if emotion_response == "positive":
-                        print(f"Positive emotional response detected for track {current_track_id}, adding +1 score")
-                        addDB(current_track_id, 1)
-                    elif emotion_response == "negative":
-                        print(f"Negative emotional response detected for track {current_track_id}, adding -1 score")
-                        addDB(current_track_id, -1)
-                    
-                    # We still check for skips as an additional negative signal
+                    if emotion:
+                        print(f"Current emotion is '{emotion}' for track {curr}")
+                        
+                        score = 0
+                        if emotion in positive_emotions:
+                            score = 1
+                        elif emotion in negative_emotions:
+                            score = -1
+                        
+                        if score != 0:
+                            addDB(curr, score, emotion)
+
+                    # Check for skips
                     sp_for_skip = auth()
                     if check_skip(sp_for_skip):
-                        print(f"Skip detected for track {current_track_id}, adding another -1 score")
-                        addDB(current_track_id, -1)
-                
-                # Sleep to avoid polling too frequently
-                time.sleep(2)
-                
+                        # Use a specific emotion for skips
+                        addDB(curr, -1, "skipped")
+
             except Exception as e:
                 print(f"Error in main loop: {e}")
-                time.sleep(5)  # Wait a bit longer on error
+            
+            time.sleep(5)
     
-    except KeyboardInterrupt:
-        print("\nShutting down Spotilike...")
     finally:
-        # Clean up resources
         stop_webcam()
-        print("Webcam stopped. Goodbye!")
+        print("Program terminated.")
 
 if __name__ == "__main__":
     main()
