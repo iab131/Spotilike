@@ -1,4 +1,5 @@
 import os
+from mongoDB import MongoDBManager
 
 def main():
     connection_string = os.getenv('MONGODB_URI')

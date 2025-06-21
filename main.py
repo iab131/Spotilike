@@ -4,11 +4,13 @@ from dotenv import load_dotenv
 import os
 import time
 from datetime import datetime, timedelta
+from mongoDB import MongoDBManager
 
 # Global variables to track previous track and timestamp
 previous_track_id = None
 previous_timestamp = None
 skip_threshold_seconds = 30  # Consider it a skip if track changes within 30 seconds
+mongo_manager = None
 
 def auth():
     load_dotenv()
@@ -64,16 +66,21 @@ def check_skip(sp):
     # If track has changed
     if current_track_id != previous_track_id:
         # Calculate time difference
-        time_diff = (current_timestamp - previous_timestamp).total_seconds()
-        
-        # If the track changed within the skip threshold, consider it a skip
-        if time_diff < skip_threshold_seconds:
-            print(f"Skip detected! Track changed from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
-            previous_track_id = current_track_id
-            previous_timestamp = current_timestamp
-            return True
+        if previous_timestamp:
+            time_diff = (current_timestamp - previous_timestamp).total_seconds()
+            
+            # If the track changed within the skip threshold, consider it a skip
+            if time_diff < skip_threshold_seconds:
+                print(f"Skip detected! Track changed from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
+                previous_track_id = current_track_id
+                previous_timestamp = current_timestamp
+                return True
+            else:
+                print(f"Track changed naturally from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
         else:
-            print(f"Track changed naturally from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
+            # This case handles the very first track change where previous_timestamp might be None
+            # but previous_track_id is set.
+            print(f"Track changed from {previous_track_id} to {current_track_id}")
     
     # Update previous track info
     previous_track_id = current_track_id
@@ -91,7 +98,30 @@ def skipped():
         print(f"Error checking for skips: {e}")
         return False
 
+def initDB():
+    global mongo_manager
+    connection_string = os.getenv('MONGODB_URI')
+    if not connection_string:
+        print("❌ MONGODB_URI environment variable not set. Please set it in a .env file.")
+        return None
+    mongo_manager = MongoDBManager(connection_string, "spotilike", "tracks")
+    if not mongo_manager.connect():
+        return None
+    return mongo_manager
+
+def addDB(track_id, score):
+    if mongo_manager:
+        mongo_manager.update_track_score(track_id, score)
+
+def runModel():
+    # Placeholder for model execution
+    return "happy"
+
 def main():
+    if not initDB():
+        print("Failed to initialize database connection. Exiting.")
+        return
+
     while True:
         try:
             sp = auth()
@@ -102,7 +132,11 @@ def main():
                 res = runModel()
                 if res == "happy":
                     addDB(curr, 1)
-                if check_skip(sp):
+                
+                # We need to re-auth here because check_skip creates its own sp instance
+                # which might be different. A better approach would be to pass the sp object.
+                sp_for_skip = auth()
+                if check_skip(sp_for_skip):
                     addDB(curr, -1)
         except Exception as e:
             print(f"Error: {e}")
