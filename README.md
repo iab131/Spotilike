@@ -1,119 +1,142 @@
-# DeepFace Facial Recognition Project
+# Spotilike - Emotion-Based Music Recommendation
 
-This project implements facial recognition features using the DeepFace library, which is a lightweight facial recognition and facial attribute analysis framework for Python.
-
-## Files in this Project
-
-1. `facial_recognition.py` - Contains utility functions for various facial recognition tasks
-2. `realtime_recognition.py` - Implements real-time facial recognition using webcam
-3. `facial_recognition_gui.py` - A graphical user interface for easy usage of facial recognition features
+A full-stack web application that analyzes your emotional state and recommends music based on your current situation and mood.
 
 ## Features
 
-- **Face Detection**: Detect and locate faces in images
-- **Face Recognition**: Identify people by comparing faces against a database
-- **Face Verification**: Verify if two faces belong to the same person
-- **Facial Analysis**: Determine age, gender, emotion, and ethnicity from a face
-- **Real-time Processing**: Process webcam images in real-time
-- **Batch Processing**: Process multiple images in a directory
+- **Spotify Authentication**: Secure OAuth flow with Spotify
+- **Emotion Analysis**: Uses Gemini AI to analyze text and extract sentiment/keywords
+- **Music Recommendation**: Automatically finds and plays music based on your mood
+- **Real-time Emotion Detection**: Webcam-based emotion analysis (backend)
+- **Modern UI**: Beautiful Next.js frontend with Tailwind CSS
 
-## Requirements
+## Prerequisites
 
-- Python 3.6+
-- OpenCV
-- DeepFace
-- NumPy
-- Matplotlib
-- TensorFlow (installed automatically with DeepFace)
-- Tkinter (for GUI application)
-- PIL (for GUI application)
+- Node.js (v18 or higher)
+- Python 3.8+
+- Spotify Premium account (for playback control)
+- MongoDB database
+- Google Gemini API key
 
-## Getting Started
+## Environment Variables
 
-1. Make sure DeepFace is installed:
-   ```
-   pip install deepface
-   ```
+Create a `.env` file in the `Backend/` directory:
 
-2. Run one of the applications:
-   
-   - For GUI application:
-     ```
-     python facial_recognition_gui.py
-     ```
-   
-   - For real-time recognition using webcam:
-     ```
-     python realtime_recognition.py
-     ```
+```env
+# Spotify API
+CLIENT_ID=your_spotify_client_id
+CLIENT_SECRET=your_spotify_client_secret
 
-   - For using utility functions in your own code:
-     ```python
-     from facial_recognition import face_verification, face_analysis, find_faces
-     ```
+# Google Gemini API
+GEM_API_KEY=your_gemini_api_key
 
-## Usage Examples
+# MongoDB
+MONGODB_URI=your_mongodb_connection_string
 
-### Using the GUI Application
-
-The GUI application provides an easy-to-use interface for facial recognition tasks:
-
-1. Start the application: `python facial_recognition_gui.py`
-2. Click "Start Webcam" or open an image file from the File menu
-3. Use the tools to perform various facial recognition operations:
-   - Detect Faces
-   - Analyze Face (age, gender, emotion)
-   - Capture a face as reference
-   - Compare against reference face
-   - Add faces to the database
-   - Find matches in the database
-
-### Using the Real-time Recognition
-
-1. Start the application: `python realtime_recognition.py`
-2. Choose option 1 for webcam-based recognition
-3. Use keyboard controls:
-   - Press 'q' to quit
-   - Press 'c' to capture reference face
-   - Press 's' to save current face to database
-   - Press 'a' to toggle facial attribute analysis mode
-
-### Using the Utility Functions
-
-```python
-from facial_recognition import face_verification, face_analysis, find_faces, face_recognition_demo
-
-# Verify if two faces match
-result = face_verification("person1.jpg", "person2.jpg")
-
-# Analyze facial attributes
-analysis = face_analysis("face.jpg")
-
-# Detect faces in an image
-faces = find_faces("group_photo.jpg")
-
-# Create a face database
-create_database("known_faces_folder", "my_face_db")
-
-# Find a face in the database
-matches = face_recognition_demo("unknown_person.jpg", "my_face_db")
+# Flask
+SECRET_KEY=your_secret_key_here
 ```
 
-## Notes
+## Installation & Setup
 
-- For first-time use, DeepFace will download required models which may take some time
-- Face database is stored in the "face_db" folder in the project directory
-- Real-time processing may be slow on systems with limited computing resources
+### Backend Setup
+
+1. Navigate to the backend directory:
+   ```bash
+   cd Backend
+   ```
+
+2. Create and activate a virtual environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   ```
+
+3. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. Start the Flask server:
+   ```bash
+   python app.py
+   ```
+
+The backend will run on `http://localhost:5000`
+
+### Frontend Setup
+
+1. Navigate to the frontend directory:
+   ```bash
+   cd Frontend
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+3. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+The frontend will run on `http://localhost:3000`
+
+## Usage
+
+1. **Open your browser** and go to `http://localhost:3000`
+2. **Click "Log in with Spotify"** to authenticate
+3. **Enter your current situation** in the text input (e.g., "I just got a promotion", "I'm feeling stressed about work")
+4. **Click "Analyze"** to get sentiment and keyword analysis
+5. **Click "Play Music"** to start playing music that matches your mood
+
+## API Endpoints
+
+### Authentication
+- `GET /api/auth/spotify` - Get Spotify authorization URL
+- `GET /callback` - Handle Spotify OAuth callback
+- `GET /api/auth/status` - Check authentication status
+
+### Music & Analysis
+- `POST /api/analyze-situation` - Analyze text for sentiment and keywords
+- `POST /api/play-music` - Play music based on sentiment and keyword
+- `GET /api/current-emotion` - Get current emotion from webcam
+
+## Architecture
+
+- **Frontend**: Next.js 14 with TypeScript and Tailwind CSS
+- **Backend**: Flask with Python
+- **AI**: Google Gemini for text analysis
+- **Music**: Spotify Web API for music playback
+- **Database**: MongoDB for storing track reactions
+- **Authentication**: Spotify OAuth 2.0
 
 ## Troubleshooting
 
-- If you encounter "No module named 'deepface'" error, install it with `pip install deepface`
-- If face detection fails, try different lighting conditions or adjust your position
-- For performance issues, consider:
-  - Reducing the frame size for webcam input
-  - Increasing the detection interval
-  - Using a more powerful computer
+### Spotify Authentication Issues
+- Ensure your Spotify app is properly configured in the Spotify Developer Dashboard
+- Add your email as a user in your Spotify app settings
+- Make sure you have a Spotify Premium account for playback control
+
+### Backend Issues
+- Check that all environment variables are set correctly
+- Ensure MongoDB is running and accessible
+- Verify that all Python dependencies are installed
+
+### Frontend Issues
+- Make sure both frontend and backend servers are running
+- Check browser console for any CORS or network errors
+- Ensure you're using the correct ports (3000 for frontend, 5000 for backend)
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## License
 
-This project is meant for educational and personal use.
+This project is licensed under the MIT License.

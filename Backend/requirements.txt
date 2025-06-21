@@ -1,4 +1,5 @@
 Flask
+Flask-CORS
 pymongo
 python-dotenv
 spotipy
@@ -7,6 +8,4 @@ opencv-python
 numpy
 matplotlib
 tf-keras
-pymongo
 google-generativeai
-pip install -q -U google-genai

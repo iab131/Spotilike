@@ -1,12 +1,109 @@
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
 import Player from '@/components/Player';
 import MoodPlaylist from '@/components/MoodPlaylist';
 
 export default function Dashboard() {
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [situation, setSituation] = useState('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  // Check authentication status on component mount
+  useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  const checkAuthStatus = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/auth/status');
+      const data = await response.json();
+      
+      if (data.authenticated) {
+        setIsAuthenticated(true);
+      } else {
+        // Redirect to login if not authenticated
+        router.push('/login');
+      }
+    } catch (error) {
+      console.error('Error checking auth status:', error);
+      router.push('/login');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAnalyzeSituation = async () => {
+    if (!situation.trim()) return;
+    
+    setIsAnalyzing(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/analyze-situation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ situation: situation }),
+      });
+      
+      const data = await response.json();
+      if (data.sentiment && data.keyword) {
+        setAnalysis(data);
+      }
+    } catch (error) {
+      console.error('Error analyzing situation:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handlePlayMusic = async () => {
+    if (!analysis) return;
+    
+    setIsPlaying(true);
+    try {
+      const response = await fetch('http://localhost:5000/api/play-music', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sentiment: analysis.sentiment,
+          keyword: analysis.keyword,
+          num_songs: 5
+        }),
+      });
+      
+      const data = await response.json();
+      if (data.tracks) {
+        console.log('Playing tracks:', data.tracks);
+      }
+    } catch (error) {
+      console.error('Error playing music:', error);
+    } finally {
+      setIsPlaying(false);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-spotify-black">
+        <div className="text-white text-xl">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return null; // Will redirect to login
+  }
+
   // Mock data for demonstration
   const mostReactedSongs = [
     { title: 'Happy Vibes', artist: 'Good Mood', },
@@ -41,6 +138,49 @@ export default function Dashboard() {
                 <h1 className="text-3xl font-bold">Welcome Back!</h1>
                 <p className="text-gray-400">Your music, tailored to your emotions</p>
               </div>
+            </div>
+          </section>
+
+          {/* Situation Input Section */}
+          <section className="mb-8">
+            <h2 className="text-2xl font-bold mb-4">How are you feeling today?</h2>
+            <div className="bg-spotify-light-gray bg-opacity-30 rounded-lg p-6">
+              <div className="flex gap-4 mb-4">
+                <input
+                  type="text"
+                  value={situation}
+                  onChange={(e) => setSituation(e.target.value)}
+                  placeholder="Tell us what's happening... (e.g., 'I just got a promotion', 'I'm feeling stressed about work')"
+                  className="flex-1 bg-spotify-light-gray text-white px-4 py-2 rounded-lg border border-gray-600 focus:outline-none focus:border-green-500"
+                />
+                <button
+                  onClick={handleAnalyzeSituation}
+                  disabled={isAnalyzing || !situation.trim()}
+                  className="bg-green-500 hover:bg-green-600 disabled:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium"
+                >
+                  {isAnalyzing ? 'Analyzing...' : 'Analyze'}
+                </button>
+              </div>
+              
+              {analysis && (
+                <div className="bg-spotify-light-gray bg-opacity-50 rounded-lg p-4 mb-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-gray-400">Detected Mood:</p>
+                      <p className="text-xl font-semibold capitalize">{analysis.sentiment}</p>
+                      <p className="text-gray-400 mt-1">Topic:</p>
+                      <p className="text-lg capitalize">{analysis.keyword}</p>
+                    </div>
+                    <button
+                      onClick={handlePlayMusic}
+                      disabled={isPlaying}
+                      className="bg-green-500 hover:bg-green-600 disabled:bg-gray-600 text-white px-6 py-3 rounded-lg font-medium"
+                    >
+                      {isPlaying ? 'Playing...' : 'Play Music'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
           
