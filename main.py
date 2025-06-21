@@ -124,7 +124,12 @@ def initDB():
 
 def addDB(track_id, score, emotion="neutral"):
     if mongo_manager:
-        mongo_manager.update_track_score(track_id, score, emotion)
+        # Only add if the track does not already exist
+        existing = mongo_manager.find_one({'track_id': track_id})
+        if not existing:
+            mongo_manager.update_track_score(track_id, score, emotion)
+        else:
+            print(f"Track {track_id} already scored, skipping update.")
 
 def start_webcam():
     """Start the webcam and emotion detection in a separate thread"""

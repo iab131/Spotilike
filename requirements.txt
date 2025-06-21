@@ -6,3 +6,5 @@ deepface
 opencv-python
 numpy
 matplotlib
+tf-keras
+pymongo
