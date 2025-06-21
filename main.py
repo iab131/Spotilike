@@ -3,6 +3,10 @@ import spotipy
 from dotenv import load_dotenv
 import os
 import time
+import threading
+import cv2
+import numpy as np
+from deepface import DeepFace
 from datetime import datetime, timedelta
 from mongoDB import MongoDBManager
 
@@ -11,6 +15,15 @@ previous_track_id = None
 previous_timestamp = None
 skip_threshold_seconds = 30  # Consider it a skip if track changes within 30 seconds
 mongo_manager = None
+
+# Globals for webcam and emotion detection
+webcam_active = False
+webcam_thread = None
+current_emotion = None
+emotion_lock = threading.Lock()
+positive_emotions = ['happy', 'surprise']
+negative_emotions = ['angry', 'disgust', 'fear', 'sad']
+neutral_emotions = ['neutral']
 
 def auth():
     load_dotenv()
@@ -113,33 +126,149 @@ def addDB(track_id, score):
     if mongo_manager:
         mongo_manager.update_track_score(track_id, score)
 
+def start_webcam():
+    """Start the webcam and emotion detection in a separate thread"""
+    global webcam_active, webcam_thread, current_emotion
+    
+    if webcam_active:
+        print("Webcam is already active")
+        return
+    
+    webcam_active = True
+    webcam_thread = threading.Thread(target=webcam_emotion_detection, daemon=True)
+    webcam_thread.start()
+    print("Webcam started for emotion detection")
+
+def stop_webcam():
+    """Stop the webcam thread"""
+    global webcam_active
+    webcam_active = False
+    if webcam_thread:
+        webcam_thread.join(timeout=2.0)
+    print("Webcam stopped")
+
+def webcam_emotion_detection():
+    """Function to run in a thread for continuous emotion detection"""
+    global webcam_active, current_emotion
+    
+    try:
+        cap = cv2.VideoCapture(0)
+        if not cap.isOpened():
+            print("Error: Could not open webcam")
+            webcam_active = False
+            return
+
+        # Process at regular intervals to avoid high CPU usage
+        process_interval = 1.0  # Process every 1 second
+        last_process_time = time.time()
+        
+        while webcam_active:
+            ret, frame = cap.read()
+            if not ret:
+                break
+                
+            current_time = time.time()
+            # Only process frames at specified intervals
+            if current_time - last_process_time > process_interval:
+                try:
+                    # Analyze emotions
+                    result = DeepFace.analyze(frame, actions=['emotion'], enforce_detection=False)
+                    
+                    # Extract the dominant emotion
+                    if isinstance(result, list) and len(result) > 0:
+                        detected_emotion = result[0].get('dominant_emotion', 'neutral')
+                    else:
+                        detected_emotion = result.get('dominant_emotion', 'neutral')
+                    
+                    # Update current emotion with thread safety
+                    with emotion_lock:
+                        current_emotion = detected_emotion
+                        
+                    print(f"Detected emotion: {current_emotion}")
+                    last_process_time = current_time
+                except Exception as e:
+                    print(f"Error detecting emotion: {e}")
+            
+            time.sleep(0.03)  # Limit to ~30 FPS
+            
+        # Release the webcam
+        cap.release()
+    except Exception as e:
+        print(f"Error in webcam thread: {e}")
+        webcam_active = False
+
+def get_current_emotion():
+    """Get the current detected emotion safely"""
+    with emotion_lock:
+        return current_emotion
+
 def runModel():
-    # Placeholder for model execution
-    return "happy"
+    """
+    Determine user's emotional response to the current track
+    Returns: emotion category (positive, negative, neutral)
+    """
+    emotion = get_current_emotion()
+    
+    if not emotion:
+        print("No emotion detected, using neutral")
+        return "neutral"
+    
+    print(f"Current emotion for song evaluation: {emotion}")
+    
+    if emotion in positive_emotions:
+        return "positive"
+    elif emotion in negative_emotions:
+        return "negative"
+    else:
+        return "neutral"
 
 def main():
     if not initDB():
         print("Failed to initialize database connection. Exiting.")
         return
-
-    while True:
-        try:
-            sp = auth()
-            curr = getCurr(sp)
-            print(curr)
-            if curr != None:
-                res = "sad"
-                res = runModel()
-                if res == "happy":
-                    addDB(curr, 1)
+    
+    print("Starting Spotilike with facial emotion detection...")
+    print("Starting webcam for emotion detection...")
+    start_webcam()
+    
+    try:
+        while True:
+            try:
+                sp = auth()
+                current_track_id = getCurr(sp)
                 
-                # We need to re-auth here because check_skip creates its own sp instance
-                # which might be different. A better approach would be to pass the sp object.
-                sp_for_skip = auth()
-                if check_skip(sp_for_skip):
-                    addDB(curr, -1)
-        except Exception as e:
-            print(f"Error: {e}")
+                if current_track_id:
+                    # Get emotional response to the song
+                    emotion_response = runModel()
+                    print(f"Track ID: {current_track_id} | Emotional response: {emotion_response}")
+                    
+                    # Update database based on emotional response
+                    if emotion_response == "positive":
+                        print(f"Positive emotional response detected for track {current_track_id}, adding +1 score")
+                        addDB(current_track_id, 1)
+                    elif emotion_response == "negative":
+                        print(f"Negative emotional response detected for track {current_track_id}, adding -1 score")
+                        addDB(current_track_id, -1)
+                    
+                    # We still check for skips as an additional negative signal
+                    sp_for_skip = auth()
+                    if check_skip(sp_for_skip):
+                        print(f"Skip detected for track {current_track_id}, adding another -1 score")
+                        addDB(current_track_id, -1)
+                
+                # Sleep to avoid polling too frequently
+                time.sleep(2)
+                
+            except Exception as e:
+                print(f"Error in main loop: {e}")
+                time.sleep(5)  # Wait a bit longer on error
+    
+    except KeyboardInterrupt:
+        print("\nShutting down Spotilike...")
+    finally:
+        # Clean up resources
+        stop_webcam()
+        print("Webcam stopped. Goodbye!")
 
 if __name__ == "__main__":
     main()

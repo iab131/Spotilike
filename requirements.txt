@@ -2,3 +2,7 @@ Flask
 pymongo
 python-dotenv
 spotipy
+deepface
+opencv-python
+numpy
+matplotlib
