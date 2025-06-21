@@ -4,6 +4,48 @@ import time
 from deepface import DeepFace
 import numpy as np
 
+# --- Constants for distance estimation ---
+# Known parameters for distance calculation
+# This is an approximation. For better accuracy, calibrate this value.
+# KNOWN_DISTANCE: The distance from the camera to the face (in cm)
+KNOWN_DISTANCE = 50.0
+# KNOWN_FACE_WIDTH: The average width of a human face (in cm)
+KNOWN_FACE_WIDTH = 15.0
+# FOCAL_LENGTH: Calculated based on a reference image or camera specs
+# We will calculate it based on a reference face width in pixels.
+# Let's assume at 50cm, the face width is 150 pixels.
+# Focal Length = (PixelWidth * Distance) / RealWidth
+FOCAL_LENGTH = (150 * KNOWN_DISTANCE) / KNOWN_FACE_WIDTH # Or some pre-calculated value
+
+def calculate_distance(face_width_in_pixels):
+    """
+    Calculate the distance of the face from the camera.
+    """
+    if face_width_in_pixels == 0:
+        return -1.0  # Avoid division by zero
+    
+    # Formula: Distance = (KnownFaceWidth_cm * FocalLength_pixels) / FaceWidth_pixels
+    distance = (KNOWN_FACE_WIDTH * FOCAL_LENGTH) / face_width_in_pixels
+    return distance
+
+def map_distance_to_volume(distance, min_dist=30, max_dist=150):
+    """
+    Map the calculated distance to a volume level (0-100).
+    Volume decreases as distance increases.
+    """
+    if distance < 0:
+        return 0
+    
+    # Clamp the distance to the defined range
+    distance = max(min_dist, min(distance, max_dist))
+    
+    # Linearly scale the volume: 100 at min_dist, 0 at max_dist
+    # (distance - min_dist) will be 0 at min_dist -> volume is 100
+    # (distance - min_dist) will be (max_dist - min_dist) at max_dist -> volume is 0
+    volume = 100 - ((distance - min_dist) / (max_dist - min_dist)) * 100
+    
+    return int(max(0, min(100, volume))) # Ensure volume is between 0 and 100
+
 def real_time_facial_recognition():
     """
     Real-time facial recognition using webcam
@@ -54,6 +96,16 @@ def real_time_facial_recognition():
                     face = faces[0]
                     x, y, w, h = face['facial_area']['x'], face['facial_area']['y'], face['facial_area']['w'], face['facial_area']['h']
                     cv2.rectangle(display_frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                    
+                    # --- Distance and Volume Calculation ---
+                    distance = calculate_distance(w)
+                    volume = map_distance_to_volume(distance)
+                    
+                    # Display distance and volume
+                    dist_text = f"Distance: {distance:.2f} cm"
+                    vol_text = f"Volume: {volume}"
+                    cv2.putText(display_frame, dist_text, (x, y+h+20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                    cv2.putText(display_frame, vol_text, (x, y+h+45), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
                     
                     # If we have a reference face, try to match
                     if reference_face is not None:
