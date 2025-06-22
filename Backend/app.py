@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, redirect, url_for, session, Response
 from flask_cors import CORS
 from situation import analyze_text_sentiment_and_keyword, extract_json_from_response, play_multiple_songs_for_feeling_and_keyword
-from main import auth
+from main import auth, initDB, getCurr, check_skip, addDB, get_current_emotion, start_webcam, stop_webcam, get_webcam_status, main as main_function
 from mongoDB import MongoDBManager
 import os
 from dotenv import load_dotenv
@@ -23,6 +23,10 @@ sp = auth()
 # Global variable to track database updates
 db_update_event = threading.Event()
 last_db_update = time.time()
+
+# Global variable to track the main monitoring thread
+main_monitoring_thread = None
+monitoring_active = False
 
 # Spotify OAuth setup
 def create_spotify_oauth():
@@ -370,9 +374,9 @@ def get_playback_state():
 def start_webcam():
     """Start webcam and emotion detection"""
     try:
-        from main import start_webcam
-        start_webcam()
-        return jsonify({"message": "Webcam started for emotion detection"})
+        # Start the main monitoring system which includes webcam
+        start_main_monitoring()
+        return jsonify({"message": "Webcam and monitoring started for emotion detection"})
     except Exception as e:
         print(f"Error starting webcam: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -381,9 +385,9 @@ def start_webcam():
 def stop_webcam():
     """Stop webcam and emotion detection"""
     try:
-        from main import stop_webcam
-        stop_webcam()
-        return jsonify({"message": "Webcam stopped"})
+        # Stop the main monitoring system which includes webcam
+        stop_main_monitoring()
+        return jsonify({"message": "Webcam and monitoring stopped"})
     except Exception as e:
         print(f"Error stopping webcam: {str(e)}")
         return jsonify({"error": str(e)}), 500
@@ -392,26 +396,59 @@ def stop_webcam():
 def get_webcam_status():
     """Get current webcam status"""
     try:
-        from main import get_webcam_status
         status = get_webcam_status()
+        status['monitoring_active'] = monitoring_active
         return jsonify(status)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/monitoring/start', methods=['POST'])
+def api_start_monitoring():
+    """Start the main monitoring system"""
+    try:
+        start_main_monitoring()
+        return jsonify({"message": "Main monitoring system started"})
+    except Exception as e:
+        print(f"Error starting monitoring: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/monitoring/stop', methods=['POST'])
+def api_stop_monitoring():
+    """Stop the main monitoring system"""
+    try:
+        stop_main_monitoring()
+        return jsonify({"message": "Main monitoring system stopped"})
+    except Exception as e:
+        print(f"Error stopping monitoring: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/monitoring/status', methods=['GET'])
+def api_get_monitoring_status():
+    """Get current monitoring status"""
+    try:
+        webcam_status = get_webcam_status()
+        return jsonify({
+            "monitoring_active": monitoring_active,
+            "webcam_active": webcam_status.get('webcam_active', False),
+            "current_emotion": webcam_status.get('current_emotion', 'none')
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/enjoyed-songs', methods=['GET'])
 def get_enjoyed_songs():
-    """Get top 5 songs with scores greater than 1 from database"""
+    """Get top 5 songs with total_score greater than 1 from database"""
     try:
         # Initialize MongoDB connection
         mongo_manager = MongoDBManager()
         if not mongo_manager.connect():
             return jsonify({"error": "Database connection failed"}), 500
         
-        # Get top 5 songs with score > 1, sorted by score descending
+        # Get top 5 songs with total_score > 1, sorted by total_score descending
         songs = mongo_manager.find_many(
-            filter_query={"score": {"$gt": 1}},
+            filter_query={"total_score": {"$gt": 1}},
             limit=5,
-            sort_by=("score", -1)
+            sort_by=("total_score", -1)
         )
         
         if not songs:
@@ -451,14 +488,24 @@ def get_enjoyed_songs():
                 if spotify_track.get('artists') and len(spotify_track['artists']) > 0:
                     artist_name = spotify_track['artists'][0].get('name', 'Unknown')
                 
+                # Find the dominant emotion (highest count)
+                emotion_counts = {}
+                for emotion in ['happy', 'sad', 'angry', 'surprise', 'fear', 'disgust', 'neutral', 'skipped']:
+                    emotion_field = f'emotion_{emotion}'
+                    emotion_counts[emotion] = song.get(emotion_field, 0)
+                
+                # Get the emotion with the highest count
+                dominant_emotion = max(emotion_counts, key=emotion_counts.get)
+                
                 enjoyed_songs.append({
                     "track_id": song['track_id'],
                     "title": spotify_track.get('name', 'Unknown'),
                     "artist": artist_name,
                     "album_art": album_art,
                     "duration": duration_str,
-                    "emotion": song.get('emotion', 'unknown'),
-                    "score": song.get('score', 0)
+                    "emotion": dominant_emotion,
+                    "score": song.get('total_score', 0),
+                    "emotion_breakdown": emotion_counts
                 })
         
         mongo_manager.disconnect()
@@ -493,6 +540,57 @@ def db_updates_sse():
     
     return Response(generate(), mimetype='text/plain')
 
+def main_monitoring_loop():
+    """Run the original main function from main.py in a thread"""
+    global monitoring_active
+    
+    print("🔄 Starting main function from main.py...")
+    
+    try:
+        # Run the original main function
+        main_function()
+    except Exception as e:
+        print(f"❌ Error in main function: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        print("🔄 Main function from main.py stopped.")
+
+def start_main_monitoring():
+    """Start the main function from main.py in a thread"""
+    global main_monitoring_thread, monitoring_active
+    
+    if monitoring_active:
+        print("⚠️ Main monitoring is already active")
+        return
+    
+    monitoring_active = True
+    main_monitoring_thread = threading.Thread(target=main_monitoring_loop, daemon=True)
+    main_monitoring_thread.start()
+    print("✅ Main function from main.py started in background thread")
+
+def stop_main_monitoring():
+    """Stop the main monitoring thread"""
+    global monitoring_active
+    
+    if not monitoring_active:
+        print("⚠️ Main monitoring is not active")
+        return
+    
+    monitoring_active = False
+    # The main function will handle its own cleanup
+    print("🛑 Main monitoring thread stop requested")
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
+    
+    # Start the main monitoring system automatically
+    print("🚀 Starting Spotilike Flask app...")
+    print("🔄 Initializing main monitoring system...")
+    start_main_monitoring()
+    
+    print(f"🌐 Flask app running on port {port}")
+    print("📊 Main monitoring system is active and tracking emotions/skips")
+    print("🎵 Ready to analyze your music listening experience!")
+    
     app.run(debug=True, host='0.0.0.0', port=port) 

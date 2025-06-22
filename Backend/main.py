@@ -14,7 +14,7 @@ import requests
 # Global variables to track previous track and timestamp
 previous_track_id = None
 previous_timestamp = None
-skip_threshold_seconds = 30  # Consider it a skip if track changes within 30 seconds
+skip_threshold_seconds = 10  # Consider it a skip if track changes within 10 seconds (reduced from 30)
 mongo_manager = None
 
 # Globals for webcam and emotion detection
@@ -22,9 +22,12 @@ webcam_active = False
 webcam_thread = None
 current_emotion = None
 emotion_lock = threading.Lock()
+
+# Define all possible emotions
+all_emotions = ['happy', 'sad', 'angry', 'surprise', 'fear', 'disgust', 'neutral', 'skipped']
 positive_emotions = ['happy']
-negative_emotions = ['angry', 'disgust', 'sad']
-neutral_emotions = ['neutral']
+negative_emotions = ['angry', 'disgust', 'sad', 'fear']
+neutral_emotions = ['neutral', 'surprise']
 
 def auth():
     load_dotenv()
@@ -135,32 +138,17 @@ def initDB():
 
 def addDB(track_id, score, emotion="neutral"):
     if mongo_manager:
-        # For skipped tracks, always update regardless of whether track exists
-        if emotion == "skipped":
-            mongo_manager.update_track_score(track_id, score, emotion)
-            print(f"Track {track_id} marked as skipped")
-            # Notify frontend about database update
-            try:
-                from app import notify_db_update
-                notify_db_update()
-            except ImportError:
-                # If app.py is not available, just pass
-                pass
-            return
+        # Always update the database with the new emotion tracking structure
+        mongo_manager.update_track_score(track_id, score, emotion)
+        print(f"Track {track_id} updated with emotion '{emotion}' and score {score}")
         
-        # For other emotions, only add if the track does not already exist
-        existing = mongo_manager.find_one({'track_id': track_id})
-        if not existing:
-            mongo_manager.update_track_score(track_id, score, emotion)
-            # Notify frontend about database update
-            try:
-                from app import notify_db_update
-                notify_db_update()
-            except ImportError:
-                # If app.py is not available, just pass
-                pass
-        else:
-            print(f"Track {track_id} already scored, skipping update.")
+        # Notify frontend about database update
+        try:
+            from app import notify_db_update
+            notify_db_update()
+        except ImportError:
+            # If app.py is not available, just pass
+            pass
 
 def notify_frontend_update():
     """Notify the frontend that the database has been updated"""
@@ -209,6 +197,8 @@ def webcam_emotion_detection():
             webcam_active = False
             return
 
+        print("📹 Webcam opened successfully, starting emotion detection...")
+
         # Process at regular intervals to avoid high CPU usage
         process_interval = 1.0  # Process every 1 second
         last_process_time = time.time()
@@ -237,25 +227,7 @@ def webcam_emotion_detection():
                     with emotion_lock:
                         current_emotion = detected_emotion
                     
-                    # Check if there's a track playing and save emotion to database
-                    try:
-                        sp = auth()
-                        curr = getCurr(sp)
-                        if curr is not None:
-                            # Calculate score based on emotion
-                            score = 0
-                            if detected_emotion in positive_emotions:
-                                score = 1
-                            elif detected_emotion in negative_emotions:
-                                score = -1
-                            
-                            if score != 0:
-                                addDB(curr, score, detected_emotion)
-                                print(f"Saved emotion '{detected_emotion}' (score: {score}) for track {curr}")
-                    except Exception as e:
-                        print(f"Error saving emotion to database: {e}")
-                        
-                    print(f"Detected emotion: {detected_emotion}")
+                    print(f"😊 Detected emotion: {detected_emotion}")
                     last_process_time = current_time
                 except Exception as e:
                     print(f"Error detecting emotion: {e}")
@@ -264,6 +236,7 @@ def webcam_emotion_detection():
             
         # Release the webcam
         cap.release()
+        print("📹 Webcam released")
     except Exception as e:
         print(f"Error in webcam thread: {e}")
         webcam_active = False
