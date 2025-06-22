@@ -15,7 +15,15 @@ interface EnjoyedSong {
   duration: string;
   emotion: string;
   score: number;
+  happy?: number;
+  sad?: number;
+  angry?: number;
+  surprise?: number;
+  fear?: number;
+  disgust?: number;
+  neutral?: number;
 }
+
 
 export default function Dashboard() {
   const router = useRouter();
@@ -28,21 +36,18 @@ export default function Dashboard() {
   const [enjoyedSongs, setEnjoyedSongs] = useState<EnjoyedSong[]>([]);
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [rankedSongs, setRankedSongs] = useState<EnjoyedSong[]>([]);
   
-  // Mock search categories
+  // Only keep these moods
   const searchCategories = [
-    { name: 'Happy', color: 'from-yellow-400 to-orange-500' },
-    { name: 'Chill', color: 'from-blue-400 to-indigo-500' },
-    { name: 'Focus', color: 'from-green-400 to-emerald-500' },
-    { name: 'Energetic', color: 'from-red-400 to-pink-500' },
-    { name: 'Sad', color: 'from-purple-400 to-violet-500' },
-    { name: 'Workout', color: 'from-orange-400 to-red-500' },
-    { name: 'Party', color: 'from-pink-400 to-purple-500' },
-    { name: 'Sleep', color: 'from-indigo-400 to-blue-500' },
-    { name: 'Ambient', color: 'from-teal-400 to-cyan-500' },
-    { name: 'Jazz', color: 'from-amber-400 to-yellow-500' },
-    { name: 'Focused', color: 'from-slate-400 to-gray-500' },
-    { name: 'Rap', color: 'from-gray-400 to-slate-500' },
+    { name: 'Happy', color: 'from-yellow-400 to-orange-500', key: 'happy' },
+    { name: 'Sad', color: 'from-purple-400 to-violet-500', key: 'sad' },
+    { name: 'Angry', color: 'from-red-500 to-yellow-700', key: 'angry' },
+    { name: 'Surprise', color: 'from-pink-400 to-yellow-400', key: 'surprise' },
+    { name: 'Fear', color: 'from-blue-900 to-gray-700', key: 'fear' },
+    { name: 'Disgust', color: 'from-green-600 to-lime-400', key: 'disgust' },
+    { name: 'Neutral', color: 'from-gray-400 to-gray-600', key: 'neutral' },
   ];
 
   // Check authentication status on component mount
@@ -200,6 +205,28 @@ export default function Dashboard() {
     return emotionMap[emotion.toLowerCase()] || '🎵';
   };
 
+  // Handler for mood button click
+  const handleMoodClick = async (moodKey: string) => {
+    setSelectedMood(moodKey);
+    setIsLoadingSongs(true);
+    try {
+      // Fetch all songs with emotion scores from backend
+      const response = await fetch('http://localhost:5001/api/enjoyed-songs');
+      const data = await response.json();
+      if (data.songs) {
+        // Sort songs by the selected mood's score (descending)
+        const sorted = [...data.songs].sort((a, b) => (b[moodKey] || 0) - (a[moodKey] || 0));
+        setRankedSongs(sorted);
+      } else {
+        setRankedSongs([]);
+      }
+    } catch (error) {
+      setRankedSongs([]);
+    } finally {
+      setIsLoadingSongs(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-spotify-black">
@@ -298,7 +325,11 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold mb-4">Browse by mood or feeling</h2>
             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-6">
               {searchCategories.map((category, index) => (
-                <div key={index} className={`p-5 rounded-lg bg-gradient-to-br ${category.color} hover:shadow-lg transition-shadow cursor-pointer`}>
+                <div
+                  key={index}
+                  className={`p-5 rounded-lg bg-gradient-to-br ${category.color} hover:shadow-lg transition-shadow cursor-pointer ${selectedMood === category.key ? 'ring-4 ring-green-400' : ''}`}
+                  onClick={() => handleMoodClick(category.key)}
+                >
                   <h3 className="font-bold text-lg">{category.name}</h3>
                 </div>
               ))}
@@ -307,31 +338,32 @@ export default function Dashboard() {
           
 
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">Songs You Enjoyed Most</h2>
+            <h2 className="text-2xl font-bold mb-4">
+              {selectedMood ? `Top Songs for "${selectedMood.charAt(0).toUpperCase() + selectedMood.slice(1)}"` : 'Songs You Enjoyed Most'}
+            </h2>
             <div className="bg-spotify-light-gray bg-opacity-30 rounded-lg p-4">
               {isLoadingSongs ? (
                 <div className="text-center py-8">
-                  <div className="text-gray-400">Loading your enjoyed songs...</div>
+                  <div className="text-gray-400">Loading songs...</div>
                 </div>
-              ) : enjoyedSongs.length === 0 ? (
-                <div className="text-center py-8">
-                  <div className="text-gray-400">No songs with high scores yet. Start listening and reacting to build your collection!</div>
-                </div>
-              ) : (
-                <table className="w-full">
-                  <thead className="border-b border-gray-700 text-left text-gray-400">
-                    <tr>
-                      <th className="pb-3 font-normal">#</th>
-                      <th className="pb-3 font-normal">TITLE</th>
-                      <th className="pb-3 font-normal">YOUR REACTION</th>
-                      <th className="pb-3 font-normal">ARTIST</th>
-                      <th className="pb-3 font-normal">DURATION</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {enjoyedSongs.map((song, index) => {
-                      console.log('Rendering song:', song); // Debug log
-                      return (
+              ) : (selectedMood ? (
+                rankedSongs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-400">No songs found for this mood.</div>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="border-b border-gray-700 text-left text-gray-400">
+                      <tr>
+                        <th className="pb-3 font-normal">#</th>
+                        <th className="pb-3 font-normal">TITLE</th>
+                        <th className="pb-3 font-normal">SCORE</th>
+                        <th className="pb-3 font-normal">ARTIST</th>
+                        <th className="pb-3 font-normal">DURATION</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rankedSongs.map((song, index) => (
                         <tr key={song.track_id} className="hover:bg-white hover:bg-opacity-10">
                           <td className="py-3">{index + 1}</td>
                           <td className="py-3">
@@ -342,29 +374,83 @@ export default function Dashboard() {
                                   alt={song.title || 'Album cover'}
                                   className="w-10 h-10 rounded mr-3"
                                   onError={(e) => {
-                                    // Hide the image if it fails to load
                                     e.currentTarget.style.display = 'none';
                                   }}
                                 />
                               )}
                               <div>
                                 <div className="font-medium">{song?.title || 'Unknown Title'}</div>
-                                <div className="text-sm text-gray-400">Score: {song?.score || 0}</div>
+                                <div className="text-sm text-gray-400">Score: {song[selectedMood] || 0}</div>
                               </div>
                             </div>
                           </td>
-                          <td className="py-3">
-                            <span className="text-lg" title={song?.emotion || 'unknown'}>
-                              {getEmotionEmoji(song?.emotion || 'unknown')}
-                            </span>
-                          </td>
+                          <td className="py-3">{song[selectedMood] || 0}</td>
                           <td className="py-3">{song?.artist || 'Unknown Artist'}</td>
                           <td className="py-3">{song?.duration || '0:00'}</td>
                         </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              ) : (
+                // Default: show enjoyed songs
+                isLoadingSongs ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-400">Loading your enjoyed songs...</div>
+                  </div>
+                ) : enjoyedSongs.length === 0 ? (
+                  <div className="text-center py-8">
+                    <div className="text-gray-400">No songs with high scores yet. Start listening and reacting to build your collection!</div>
+                  </div>
+                ) : (
+                  <table className="w-full">
+                    <thead className="border-b border-gray-700 text-left text-gray-400">
+                      <tr>
+                        <th className="pb-3 font-normal">#</th>
+                        <th className="pb-3 font-normal">TITLE</th>
+                        <th className="pb-3 font-normal">YOUR REACTION</th>
+                        <th className="pb-3 font-normal">ARTIST</th>
+                        <th className="pb-3 font-normal">DURATION</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {enjoyedSongs.map((song, index) => {
+                        console.log('Rendering song:', song); // Debug log
+                        return (
+                          <tr key={song.track_id} className="hover:bg-white hover:bg-opacity-10">
+                            <td className="py-3">{index + 1}</td>
+                            <td className="py-3">
+                              <div className="flex items-center">
+                                {song && song.album_art && song.album_art !== 'null' && (
+                                  <img 
+                                    src={song.album_art} 
+                                    alt={song.title || 'Album cover'}
+                                    className="w-10 h-10 rounded mr-3"
+                                    onError={(e) => {
+                                      // Hide the image if it fails to load
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                )}
+                                <div>
+                                  <div className="font-medium">{song?.title || 'Unknown Title'}</div>
+                                  <div className="text-sm text-gray-400">Score: {song?.score || 0}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3">
+                              <span className="text-lg" title={song?.emotion || 'unknown'}>
+                                {getEmotionEmoji(song?.emotion || 'unknown')}
+                              </span>
+                            </td>
+                            <td className="py-3">{song?.artist || 'Unknown Artist'}</td>
+                            <td className="py-3">{song?.duration || '0:00'}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )
               )}
             </div>
           </section>
