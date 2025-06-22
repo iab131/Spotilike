@@ -8,6 +8,16 @@ import Player from '@/components/Player';
 import MoodPlaylist from '@/components/MoodPlaylist';
 import WebcamToggle from '@/components/WebcamToggle';
 
+interface EnjoyedSong {
+  track_id: string;
+  title: string;
+  artist: string;
+  album_art: string;
+  duration: string;
+  emotion: string;
+  score: number;
+}
+
 export default function Dashboard() {
   const router = useRouter();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -16,11 +26,60 @@ export default function Dashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysis, setAnalysis] = useState<{sentiment: string; keyword: string} | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [enjoyedSongs, setEnjoyedSongs] = useState<EnjoyedSong[]>([]);
+  const [isLoadingSongs, setIsLoadingSongs] = useState(true);
 
   // Check authentication status on component mount
   useEffect(() => {
     checkAuthStatus();
   }, []);
+
+  // Fetch enjoyed songs when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchEnjoyedSongs();
+    }
+  }, [isAuthenticated]);
+
+  // Listen for database updates
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const eventSource = new EventSource('http://localhost:5001/api/db-updates');
+    
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'db_update') {
+          console.log('Database updated, refreshing enjoyed songs...');
+          fetchEnjoyedSongs();
+        }
+      } catch (error) {
+        console.error('Error parsing SSE data:', error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      eventSource.close();
+    };
+
+    // Cleanup on unmount
+    return () => {
+      eventSource.close();
+    };
+  }, [isAuthenticated]);
+
+  // Periodic refresh as fallback (every 30 seconds)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const interval = setInterval(() => {
+      fetchEnjoyedSongs();
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
   const checkAuthStatus = async () => {
     try {
@@ -38,6 +97,22 @@ export default function Dashboard() {
       router.push('/login');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchEnjoyedSongs = async () => {
+    try {
+      setIsLoadingSongs(true);
+      const response = await fetch('http://localhost:5001/api/enjoyed-songs');
+      const data = await response.json();
+      
+      if (data.songs) {
+        setEnjoyedSongs(data.songs);
+      }
+    } catch (error) {
+      console.error('Error fetching enjoyed songs:', error);
+    } finally {
+      setIsLoadingSongs(false);
     }
   };
 
@@ -91,6 +166,19 @@ export default function Dashboard() {
     } finally {
       setIsPlaying(false);
     }
+  };
+
+  const getEmotionEmoji = (emotion: string) => {
+    const emotionMap: { [key: string]: string } = {
+      'happy': '😊',
+      'sad': '😢',
+      'angry': '😠',
+      'surprise': '😲',
+      'fear': '😨',
+      'disgust': '🤢',
+      'neutral': '😐'
+    };
+    return emotionMap[emotion.toLowerCase()] || '🎵';
   };
 
   if (isLoading) {
@@ -199,34 +287,58 @@ export default function Dashboard() {
           />
           
           <section className="mb-8">
-            <h2 className="text-2xl font-bold mb-4">Recently Played</h2>
+            <h2 className="text-2xl font-bold mb-4">Songs You Enjoyed Most</h2>
             <div className="bg-spotify-light-gray bg-opacity-30 rounded-lg p-4">
-              <table className="w-full">
-                <thead className="border-b border-gray-700 text-left text-gray-400">
-                  <tr>
-                    <th className="pb-3 font-normal">#</th>
-                    <th className="pb-3 font-normal">TITLE</th>
-                    <th className="pb-3 font-normal">YOUR REACTION</th>
-                    <th className="pb-3 font-normal">ARTIST</th>
-                    <th className="pb-3 font-normal">DURATION</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[1, 2, 3, 4, 5].map((item) => (
-                    <tr key={item} className="hover:bg-white hover:bg-opacity-10">
-                      <td className="py-3">{item}</td>
-                      <td className="py-3">Song Name {item}</td>
-                      <td className="py-3">
-                        <span className="text-lg">
-                          {item % 2 === 0 ? '😊' : '🔥'}
-                        </span>
-                      </td>
-                      <td className="py-3">Artist {item}</td>
-                      <td className="py-3">3:2{item}</td>
+              {isLoadingSongs ? (
+                <div className="text-center py-8">
+                  <div className="text-gray-400">Loading your enjoyed songs...</div>
+                </div>
+              ) : enjoyedSongs.length === 0 ? (
+                <div className="text-center py-8">
+                  <div className="text-gray-400">No songs with high scores yet. Start listening and reacting to build your collection!</div>
+                </div>
+              ) : (
+                <table className="w-full">
+                  <thead className="border-b border-gray-700 text-left text-gray-400">
+                    <tr>
+                      <th className="pb-3 font-normal">#</th>
+                      <th className="pb-3 font-normal">TITLE</th>
+                      <th className="pb-3 font-normal">YOUR REACTION</th>
+                      <th className="pb-3 font-normal">ARTIST</th>
+                      <th className="pb-3 font-normal">DURATION</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {enjoyedSongs.map((song, index) => (
+                      <tr key={song.track_id} className="hover:bg-white hover:bg-opacity-10">
+                        <td className="py-3">{index + 1}</td>
+                        <td className="py-3">
+                          <div className="flex items-center">
+                            {song.album_art && (
+                              <img 
+                                src={song.album_art} 
+                                alt={song.title}
+                                className="w-10 h-10 rounded mr-3"
+                              />
+                            )}
+                            <div>
+                              <div className="font-medium">{song.title}</div>
+                              <div className="text-sm text-gray-400">Score: {song.score}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3">
+                          <span className="text-lg" title={song.emotion}>
+                            {getEmotionEmoji(song.emotion)}
+                          </span>
+                        </td>
+                        <td className="py-3">{song.artist}</td>
+                        <td className="py-3">{song.duration}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </section>
         </div>

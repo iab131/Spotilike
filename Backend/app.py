@@ -1,11 +1,15 @@
-from flask import Flask, request, jsonify, redirect, url_for, session
+from flask import Flask, request, jsonify, redirect, url_for, session, Response
 from flask_cors import CORS
 from situation import analyze_text_sentiment_and_keyword, extract_json_from_response, play_multiple_songs_for_feeling_and_keyword
 from main import auth
+from mongoDB import MongoDBManager
 import os
 from dotenv import load_dotenv
 from spotipy.oauth2 import SpotifyOAuth
 import spotipy
+import json
+import threading
+import time
 
 load_dotenv()
 
@@ -15,6 +19,10 @@ app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-here')  # Required for
 
 # Initialize Spotify client
 sp = auth()
+
+# Global variable to track database updates
+db_update_event = threading.Event()
+last_db_update = time.time()
 
 # Spotify OAuth setup
 def create_spotify_oauth():
@@ -382,17 +390,103 @@ def stop_webcam():
 
 @app.route('/api/webcam/status', methods=['GET'])
 def get_webcam_status():
-    """Get current webcam and emotion detection status"""
+    """Get current webcam status"""
     try:
-        from main import webcam_active, get_current_emotion
-        emotion = get_current_emotion()
-        return jsonify({
-            "webcam_active": webcam_active,
-            "current_emotion": emotion
-        })
+        from main import get_webcam_status
+        status = get_webcam_status()
+        return jsonify(status)
     except Exception as e:
-        print(f"Error getting webcam status: {str(e)}")
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/enjoyed-songs', methods=['GET'])
+def get_enjoyed_songs():
+    """Get top 5 songs with scores greater than 1 from database"""
+    try:
+        # Initialize MongoDB connection
+        mongo_manager = MongoDBManager()
+        if not mongo_manager.connect():
+            return jsonify({"error": "Database connection failed"}), 500
+        
+        # Get top 5 songs with score > 1, sorted by score descending
+        songs = mongo_manager.find_many(
+            filter_query={"score": {"$gt": 1}},
+            limit=5,
+            sort_by=("score", -1)
+        )
+        
+        if not songs:
+            return jsonify({"songs": []})
+        
+        # Get Spotify client for additional track info
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated with Spotify"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        
+        # Get detailed track information from Spotify
+        track_ids = [song['track_id'] for song in songs]
+        track_details = sp.tracks(track_ids)['tracks']
+        
+        # Combine database data with Spotify data
+        enjoyed_songs = []
+        for i, song in enumerate(songs):
+            spotify_track = track_details[i]
+            if spotify_track:
+                # Convert duration from ms to mm:ss format
+                duration_ms = spotify_track.get('duration_ms', 0)
+                duration_min = duration_ms // 60000
+                duration_sec = (duration_ms % 60000) // 1000
+                duration_str = f"{duration_min}:{duration_sec:02d}"
+                
+                # Get album art (smallest for better performance)
+                album_art = None
+                if spotify_track.get('album', {}).get('images'):
+                    album_art = spotify_track['album']['images'][-1]['url']
+                
+                enjoyed_songs.append({
+                    "track_id": song['track_id'],
+                    "title": spotify_track.get('name', 'Unknown'),
+                    "artist": spotify_track.get('artists', [{}])[0].get('name', 'Unknown'),
+                    "album_art": album_art,
+                    "duration": duration_str,
+                    "emotion": song.get('emotion', 'unknown'),
+                    "score": song.get('score', 0)
+                })
+        
+        mongo_manager.disconnect()
+        return jsonify({"songs": enjoyed_songs})
+        
+    except Exception as e:
+        print(f"Error getting enjoyed songs: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+def notify_db_update():
+    """Notify frontend that database has been updated"""
+    global db_update_event, last_db_update
+    last_db_update = time.time()
+    db_update_event.set()
+    # Reset the event after a short delay
+    threading.Timer(0.1, db_update_event.clear).start()
+
+@app.route('/api/db-updates', methods=['GET'])
+def db_updates_sse():
+    """Server-Sent Events endpoint for database updates"""
+    def generate():
+        global last_db_update
+        while True:
+            # Wait for database update event
+            db_update_event.wait(timeout=30)  # 30 second timeout
+            
+            # Send update notification
+            yield f"data: {json.dumps({'timestamp': last_db_update, 'type': 'db_update'})}\n\n"
+            
+            # Small delay to prevent rapid firing
+            time.sleep(0.5)
+    
+    return Response(generate(), mimetype='text/plain')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))

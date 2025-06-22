@@ -9,6 +9,7 @@ import numpy as np
 from deepface import DeepFace
 from datetime import datetime, timedelta
 from mongoDB import MongoDBManager
+import requests
 
 # Global variables to track previous track and timestamp
 previous_track_id = None
@@ -128,8 +129,24 @@ def addDB(track_id, score, emotion="neutral"):
         existing = mongo_manager.find_one({'track_id': track_id})
         if not existing:
             mongo_manager.update_track_score(track_id, score, emotion)
+            # Notify frontend about database update
+            try:
+                from app import notify_db_update
+                notify_db_update()
+            except ImportError:
+                # If app.py is not available, just pass
+                pass
         else:
             print(f"Track {track_id} already scored, skipping update.")
+
+def notify_frontend_update():
+    """Notify the frontend that the database has been updated"""
+    try:
+        # Make a request to trigger the SSE event
+        requests.get('http://localhost:5001/api/db-updates', timeout=1)
+    except Exception as e:
+        # Ignore errors as this is just a notification
+        pass
 
 def start_webcam():
     """Start the webcam and emotion detection in a separate thread"""
@@ -232,6 +249,15 @@ def get_current_emotion():
     """Get the current detected emotion safely"""
     with emotion_lock:
         return current_emotion
+
+def get_webcam_status():
+    """Get current webcam and emotion detection status"""
+    global webcam_active, current_emotion
+    with emotion_lock:
+        return {
+            "webcam_active": webcam_active,
+            "current_emotion": current_emotion
+        }
 
 def runModel():
     """
