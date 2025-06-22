@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, redirect, url_for, session, Response
 from flask_cors import CORS
 from situation import analyze_text_sentiment_and_keyword, extract_json_from_response, play_multiple_songs_for_feeling_and_keyword
-from main import auth, initDB, getCurr, check_skip, addDB, get_current_emotion, start_webcam, stop_webcam, get_webcam_status, main as main_function
+from main import auth, initDB, getCurr, check_skip, addDB, get_current_emotion, start_webcam, stop_webcam, get_webcam_status as get_webcam_status_main, main as main_function
 from mongoDB import MongoDBManager
 import os
 from dotenv import load_dotenv
@@ -10,6 +10,7 @@ import spotipy
 import json
 import threading
 import time
+from monitoring_flag import set_main_monitoring_should_stop, get_main_monitoring_should_stop
 
 load_dotenv()
 
@@ -393,10 +394,10 @@ def stop_webcam():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/webcam/status', methods=['GET'])
-def get_webcam_status():
+def webcam_status_api():
     """Get current webcam status"""
     try:
-        status = get_webcam_status()
+        status = get_webcam_status_main()
         status['monitoring_active'] = monitoring_active
         return jsonify(status)
     except Exception as e:
@@ -426,7 +427,7 @@ def api_stop_monitoring():
 def api_get_monitoring_status():
     """Get current monitoring status"""
     try:
-        webcam_status = get_webcam_status()
+        webcam_status = get_webcam_status_main()
         return jsonify({
             "monitoring_active": monitoring_active,
             "webcam_active": webcam_status.get('webcam_active', False),
@@ -559,12 +560,11 @@ def main_monitoring_loop():
 def start_main_monitoring():
     """Start the main function from main.py in a thread"""
     global main_monitoring_thread, monitoring_active
-    
     if monitoring_active:
         print("⚠️ Main monitoring is already active")
         return
-    
     monitoring_active = True
+    set_main_monitoring_should_stop(False)  # Reset flag when starting
     main_monitoring_thread = threading.Thread(target=main_monitoring_loop, daemon=True)
     main_monitoring_thread.start()
     print("✅ Main function from main.py started in background thread")
@@ -572,13 +572,11 @@ def start_main_monitoring():
 def stop_main_monitoring():
     """Stop the main monitoring thread"""
     global monitoring_active
-    
     if not monitoring_active:
         print("⚠️ Main monitoring is not active")
         return
-    
     monitoring_active = False
-    # The main function will handle its own cleanup
+    set_main_monitoring_should_stop(True)  # Set flag to request stop
     print("🛑 Main monitoring thread stop requested")
 
 if __name__ == '__main__':
@@ -586,11 +584,13 @@ if __name__ == '__main__':
     
     # Start the main monitoring system automatically
     print("🚀 Starting Spotilike Flask app...")
-    print("🔄 Initializing main monitoring system...")
-    start_main_monitoring()
+    # print("🔄 Initializing main monitoring system...")
+    # start_main_monitoring()
     
     print(f"🌐 Flask app running on port {port}")
-    print("📊 Main monitoring system is active and tracking emotions/skips")
+    # print("📊 Main monitoring system is active and tracking emotions/skips")
     print("🎵 Ready to analyze your music listening experience!")
     
-    app.run(debug=True, host='0.0.0.0', port=port) 
+    app.run(debug=True, host='0.0.0.0', port=port)
+
+# Remove: exported_main_monitoring_should_stop = lambda: main_monitoring_should_stop 

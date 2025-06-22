@@ -10,6 +10,7 @@ from deepface import DeepFace
 from datetime import datetime, timedelta
 from mongoDB import MongoDBManager
 import requests
+from monitoring_flag import get_main_monitoring_should_stop
 
 # Global variables to track previous track and timestamp
 previous_track_id = None
@@ -280,42 +281,36 @@ def main():
     if not initDB():
         print("Failed to initialize database connection. Exiting.")
         return
-    
     start_webcam()
-
     try:
         while True:
+            # Check if the stop flag is set
+            if get_main_monitoring_should_stop():
+                print("🛑 Stop flag detected, exiting main loop.")
+                break
             try:
                 sp = auth()
                 curr = getCurr(sp)
-
                 if curr is not None:
                     # Get the latest emotion from the webcam thread
                     emotion = get_current_emotion()
-                    
                     if emotion:
                         print(f"Current emotion is '{emotion}' for track {curr}")
-                        
                         score = 0
                         if emotion in positive_emotions:
                             score = 1
                         elif emotion in negative_emotions:
                             score = -1
-                        
                         if score != 0:
                             addDB(curr, score, emotion)
-
                     # Check for skips
                     sp_for_skip = auth()
                     if check_skip(sp_for_skip):
                         # Use a specific emotion for skips
                         addDB(curr, -1, "skipped")
-
             except Exception as e:
                 print(f"Error in main loop: {e}")
-            
             time.sleep(5)
-    
     finally:
         stop_webcam()
         print("Program terminated.")

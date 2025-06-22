@@ -355,7 +355,7 @@ export default function Dashboard() {
                 <div className="text-center py-8">
                   <div className="text-gray-400">Loading songs...</div>
                 </div>
-              ) : (selectedMood ? (
+              ) : selectedMood ? (
                 rankedSongs.length === 0 ? (
                   <div className="text-center py-8">
                     <div className="text-gray-400">No songs found for this mood.</div>
@@ -464,7 +464,6 @@ export default function Dashboard() {
             </div>
           </section>
         </div>
-        
         <Player />
       </div>
     </main>
