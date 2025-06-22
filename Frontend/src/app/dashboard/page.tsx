@@ -210,17 +210,26 @@ export default function Dashboard() {
     setSelectedMood(moodKey);
     setIsLoadingSongs(true);
     try {
-      // Fetch all songs with emotion scores from backend
       const response = await fetch('http://localhost:5001/api/enjoyed-songs');
       const data = await response.json();
       if (data.songs) {
-        // Sort songs by the selected mood's score (descending)
-        const sorted = [...data.songs].sort((a, b) => (b[moodKey] || 0) - (a[moodKey] || 0));
+        const sorted = [...data.songs].sort((a, b) => {
+          // 1. Sort by mood score if available
+          if (typeof b[moodKey] === 'number' && typeof a[moodKey] === 'number') {
+            return b[moodKey] - a[moodKey];
+          }
+          // 2. Prioritize songs whose main emotion matches the mood
+          if (b.emotion === moodKey && a.emotion !== moodKey) return -1;
+          if (a.emotion === moodKey && b.emotion !== moodKey) return 1;
+          // 3. Fallback: sort by generic score
+          return (b.score || 0) - (a.score || 0);
+        });
         setRankedSongs(sorted);
       } else {
         setRankedSongs([]);
       }
     } catch (error) {
+      console.error(error);
       setRankedSongs([]);
     } finally {
       setIsLoadingSongs(false);
