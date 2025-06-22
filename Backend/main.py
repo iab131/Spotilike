@@ -66,35 +66,45 @@ def check_skip(sp):
     current = sp.current_playback()
     
     if current is None or current.get('item') is None:
+        print("🔍 Skip check: No current playback detected")
         return False
     
     current_track_id = current['item']['id']
     current_timestamp = datetime.now()
     
+    print(f"🔍 Skip check: Current track ID: {current_track_id}")
+    print(f"🔍 Skip check: Previous track ID: {previous_track_id}")
+    
     # If this is the first time checking, just store the current track
     if previous_track_id is None:
+        print("🔍 Skip check: First time checking, storing initial track")
         previous_track_id = current_track_id
         previous_timestamp = current_timestamp
         return False
     
     # If track has changed
     if current_track_id != previous_track_id:
+        print(f"🔍 Skip check: Track changed from {previous_track_id} to {current_track_id}")
+        
         # Calculate time difference
         if previous_timestamp:
             time_diff = (current_timestamp - previous_timestamp).total_seconds()
+            print(f"🔍 Skip check: Time difference: {time_diff:.1f} seconds (threshold: {skip_threshold_seconds})")
             
             # If the track changed within the skip threshold, consider it a skip
             if time_diff < skip_threshold_seconds:
-                print(f"Skip detected! Track changed from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
+                print(f"🚨 SKIP DETECTED! Track changed from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
+                print(f"🚨 This is considered a skip because {time_diff:.1f}s < {skip_threshold_seconds}s threshold")
                 previous_track_id = current_track_id
                 previous_timestamp = current_timestamp
                 return True
             else:
-                print(f"Track changed naturally from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
+                print(f"✅ Natural track change: Track changed from {previous_track_id} to {current_track_id} after {time_diff:.1f} seconds")
+                print(f"✅ This is NOT a skip because {time_diff:.1f}s >= {skip_threshold_seconds}s threshold")
         else:
             # This case handles the very first track change where previous_timestamp might be None
             # but previous_track_id is set.
-            print(f"Track changed from {previous_track_id} to {current_track_id}")
+            print(f"🔍 Skip check: Track changed from {previous_track_id} to {current_track_id} (no previous timestamp)")
     
     # Update previous track info
     previous_track_id = current_track_id
@@ -125,7 +135,20 @@ def initDB():
 
 def addDB(track_id, score, emotion="neutral"):
     if mongo_manager:
-        # Only add if the track does not already exist
+        # For skipped tracks, always update regardless of whether track exists
+        if emotion == "skipped":
+            mongo_manager.update_track_score(track_id, score, emotion)
+            print(f"Track {track_id} marked as skipped")
+            # Notify frontend about database update
+            try:
+                from app import notify_db_update
+                notify_db_update()
+            except ImportError:
+                # If app.py is not available, just pass
+                pass
+            return
+        
+        # For other emotions, only add if the track does not already exist
         existing = mongo_manager.find_one({'track_id': track_id})
         if not existing:
             mongo_manager.update_track_score(track_id, score, emotion)

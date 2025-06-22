@@ -2,10 +2,10 @@
   "name": "spotilike-root",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["front end"],
+  "workspaces": ["Frontend"],
   "scripts": {
-    "dev": "cd \"front end\" && npm run dev",
-    "build": "cd \"front end\" && npm run build",
-    "start": "cd \"front end\" && npm run start"
+    "dev": "cd Frontend && npm run dev",
+    "build": "cd Frontend && npm run build",
+    "start": "cd Frontend && npm run start"
   }
 }
