@@ -20,7 +20,7 @@ def create_spotify_oauth():
     return SpotifyOAuth(
         client_id=os.getenv("CLIENT_ID"),
         client_secret=os.getenv("CLIENT_SECRET"),
-        redirect_uri='http://localhost:5000/callback',
+        redirect_uri='http://127.0.0.1:5001/callback',
         scope='user-read-playback-state user-modify-playback-state playlist-modify-public playlist-modify-private streaming user-read-private user-read-email'
     )
 
@@ -45,8 +45,7 @@ def callback():
     
     if token_info:
         session["token_info"] = token_info
-        # Redirect to frontend dashboard
-        return redirect('http://localhost:3000/dashboard')
+        return redirect("http://localhost:3000/dashboard?auth=success")
     else:
         return jsonify({"error": "Failed to get access token"}), 400
 

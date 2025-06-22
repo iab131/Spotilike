@@ -11,7 +11,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       // Get the Spotify auth URL from our backend
-      const response = await fetch('http://localhost:5000/api/auth/spotify');
+      const response = await fetch('http://localhost:5001/api/auth/spotify');
       const data = await response.json();
       
       if (data.auth_url) {

@@ -10,7 +10,7 @@ export default function Home() {
     // Automatically initiate Spotify authentication
     const initiateSpotifyAuth = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/auth/spotify');
+        const response = await fetch('http://localhost:5001/api/auth/spotify');
         const data = await response.json();
         
         if (data.auth_url) {

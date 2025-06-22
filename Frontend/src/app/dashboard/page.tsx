@@ -23,7 +23,7 @@ export default function Dashboard() {
 
   const checkAuthStatus = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/auth/status');
+      const response = await fetch('http://localhost:5001/api/auth/status');
       const data = await response.json();
       
       if (data.authenticated) {
@@ -45,7 +45,7 @@ export default function Dashboard() {
     
     setIsAnalyzing(true);
     try {
-      const response = await fetch('http://localhost:5000/api/analyze-situation', {
+      const response = await fetch('http://localhost:5001/api/analyze-situation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,7 +69,7 @@ export default function Dashboard() {
     
     setIsPlaying(true);
     try {
-      const response = await fetch('http://localhost:5000/api/play-music', {
+      const response = await fetch('http://localhost:5001/api/play-music', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
