@@ -446,10 +446,15 @@ def get_enjoyed_songs():
                 if spotify_track.get('album', {}).get('images'):
                     album_art = spotify_track['album']['images'][-1]['url']
                 
+                # Get artist name safely
+                artist_name = 'Unknown'
+                if spotify_track.get('artists') and len(spotify_track['artists']) > 0:
+                    artist_name = spotify_track['artists'][0].get('name', 'Unknown')
+                
                 enjoyed_songs.append({
                     "track_id": song['track_id'],
                     "title": spotify_track.get('name', 'Unknown'),
-                    "artist": spotify_track.get('artists', [{}])[0].get('name', 'Unknown'),
+                    "artist": artist_name,
                     "album_art": album_art,
                     "duration": duration_str,
                     "emotion": song.get('emotion', 'unknown'),

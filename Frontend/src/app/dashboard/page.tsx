@@ -11,7 +11,7 @@ interface EnjoyedSong {
   track_id: string;
   title: string;
   artist: string;
-  album_art: string;
+  album_art?: string;
   duration: string;
   emotion: string;
   score: number;
@@ -122,7 +122,10 @@ export default function Dashboard() {
       const response = await fetch('http://localhost:5001/api/enjoyed-songs');
       const data = await response.json();
       
+      console.log('Fetched enjoyed songs data:', data); // Debug log
+      
       if (data.songs) {
+        console.log('Setting enjoyed songs:', data.songs); // Debug log
         setEnjoyedSongs(data.songs);
       }
     } catch (error) {
@@ -326,33 +329,40 @@ export default function Dashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {enjoyedSongs.map((song, index) => (
-                      <tr key={song.track_id} className="hover:bg-white hover:bg-opacity-10">
-                        <td className="py-3">{index + 1}</td>
-                        <td className="py-3">
-                          <div className="flex items-center">
-                            {song.album_art && (
-                              <img 
-                                src={song.album_art} 
-                                alt={song.title}
-                                className="w-10 h-10 rounded mr-3"
-                              />
-                            )}
-                            <div>
-                              <div className="font-medium">{song.title}</div>
-                              <div className="text-sm text-gray-400">Score: {song.score}</div>
+                    {enjoyedSongs.map((song, index) => {
+                      console.log('Rendering song:', song); // Debug log
+                      return (
+                        <tr key={song.track_id} className="hover:bg-white hover:bg-opacity-10">
+                          <td className="py-3">{index + 1}</td>
+                          <td className="py-3">
+                            <div className="flex items-center">
+                              {song && song.album_art && song.album_art !== 'null' && (
+                                <img 
+                                  src={song.album_art} 
+                                  alt={song.title || 'Album cover'}
+                                  className="w-10 h-10 rounded mr-3"
+                                  onError={(e) => {
+                                    // Hide the image if it fails to load
+                                    e.currentTarget.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <div>
+                                <div className="font-medium">{song?.title || 'Unknown Title'}</div>
+                                <div className="text-sm text-gray-400">Score: {song?.score || 0}</div>
+                              </div>
                             </div>
-                          </div>
-                        </td>
-                        <td className="py-3">
-                          <span className="text-lg" title={song.emotion}>
-                            {getEmotionEmoji(song.emotion)}
-                          </span>
-                        </td>
-                        <td className="py-3">{song.artist}</td>
-                        <td className="py-3">{song.duration}</td>
-                      </tr>
-                    ))}
+                          </td>
+                          <td className="py-3">
+                            <span className="text-lg" title={song?.emotion || 'unknown'}>
+                              {getEmotionEmoji(song?.emotion || 'unknown')}
+                            </span>
+                          </td>
+                          <td className="py-3">{song?.artist || 'Unknown Artist'}</td>
+                          <td className="py-3">{song?.duration || '0:00'}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}

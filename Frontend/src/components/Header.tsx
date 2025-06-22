@@ -6,7 +6,7 @@ export default function Header() {
   
   return (
     <header className="bg-spotify-gray px-20 py-4 flex items-center justify-between">
-      <h1 className="text-2xl font-bold ">Spotilike</h1>
+      <h1 className="text-2xl font-bold">Spotilike</h1>
       
       
       <div className="flex items-center gap-4">

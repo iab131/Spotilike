@@ -7,7 +7,7 @@ interface Track {
   name: string;
   artists: string[];
   album: string;
-  album_art: string;
+  album_art?: string;
   duration_ms: number;
   progress_ms: number;
   uri: string;
@@ -20,6 +20,7 @@ interface PlaybackInfo {
     name: string;
     type: string;
   };
+  message?: string;
 }
 
 interface PlaybackState {
@@ -225,8 +226,23 @@ export default function Player() {
     );
   }
 
+  // Check if there's actually a track playing
+  if (!playbackInfo.track) {
+    return (
+      <div className="bg-spotify-light-gray border-t border-gray-700 p-4 fixed bottom-0 left-0 right-0">
+        <div className="text-center text-gray-400">
+          {playbackInfo.message || 'No track currently playing'}
+        </div>
+      </div>
+    );
+  }
+
   const { track, is_playing } = playbackInfo;
   const progressPercentage = getProgressPercentage();
+
+  // Debug logging to help identify the issue
+  console.log('Player track data:', track);
+  console.log('Track album_art:', track?.album_art);
 
   return (
     <div className="bg-spotify-light-gray border-t border-gray-700 p-4 fixed bottom-0 left-0 right-0">
@@ -234,13 +250,17 @@ export default function Player() {
         {/* Song info */}
         <div className="flex items-center space-x-4 w-1/4">
           <div className="w-14 h-14 bg-gray-600 rounded overflow-hidden">
-            {track.album_art ? (
+            {track && track.album_art && track.album_art !== 'null' ? (
               <Image
                 src={track.album_art}
-                alt={track.album}
+                alt={track.album || 'Album cover'}
                 width={56}
                 height={56}
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  // Hide the image if it fails to load
+                  e.currentTarget.style.display = 'none';
+                }}
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -249,9 +269,9 @@ export default function Player() {
             )}
           </div>
           <div className="min-w-0 flex-1">
-            <h4 className="text-white font-medium truncate">{track.name}</h4>
+            <h4 className="text-white font-medium truncate">{track?.name || 'Unknown Track'}</h4>
             <p className="text-gray-400 text-sm truncate">
-              {track.artists.join(', ')}
+              {track?.artists && track.artists.length > 0 ? track.artists.join(', ') : 'Unknown Artist'}
             </p>
           </div>
           <button className="text-gray-400 hover:text-white">
