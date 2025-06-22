@@ -5,6 +5,7 @@ from main import auth
 import os
 from dotenv import load_dotenv
 from spotipy.oauth2 import SpotifyOAuth
+import spotipy
 
 load_dotenv()
 
@@ -129,6 +130,231 @@ def get_current_emotion():
         emotion = get_current_emotion()
         return jsonify({"emotion": emotion})
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/current-playback', methods=['GET'])
+def get_current_playback():
+    """Get current playback information from Spotify"""
+    try:
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        # Create a Spotify client with the token
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        
+        # Get current playback
+        current = sp.current_playback()
+        
+        if not current or not current.get('item'):
+            return jsonify({
+                "is_playing": False,
+                "message": "No track currently playing"
+            })
+        
+        track = current['item']
+        progress_ms = current.get('progress_ms', 0)
+        duration_ms = track.get('duration_ms', 0)
+        
+        # Get the smallest album art (for better performance)
+        album_art = None
+        if track.get('album', {}).get('images'):
+            album_art = track['album']['images'][-1]['url']  # Last image is usually smallest
+        
+        playback_info = {
+            "is_playing": current.get('is_playing', False),
+            "track": {
+                "id": track.get('id'),
+                "name": track.get('name'),
+                "artists": [artist.get('name') for artist in track.get('artists', [])],
+                "album": track.get('album', {}).get('name'),
+                "album_art": album_art,
+                "duration_ms": duration_ms,
+                "progress_ms": progress_ms,
+                "uri": track.get('uri')
+            },
+            "device": {
+                "name": current.get('device', {}).get('name'),
+                "type": current.get('device', {}).get('type')
+            }
+        }
+        
+        return jsonify(playback_info)
+        
+    except Exception as e:
+        print(f"Error getting current playback: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/play', methods=['POST'])
+def start_playback():
+    """Play or resume playback"""
+    try:
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.start_playback()
+        
+        return jsonify({"message": "Playback started"})
+        
+    except Exception as e:
+        print(f"Error starting playback: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/pause', methods=['POST'])
+def pause_playback():
+    """Pause playback"""
+    try:
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.pause_playback()
+        
+        return jsonify({"message": "Playback paused"})
+        
+    except Exception as e:
+        print(f"Error pausing playback: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/next', methods=['POST'])
+def skip_next():
+    """Skip to next track"""
+    try:
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.next_track()
+        
+        return jsonify({"message": "Skipped to next track"})
+        
+    except Exception as e:
+        print(f"Error skipping track: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/previous', methods=['POST'])
+def skip_previous():
+    """Go to previous track"""
+    try:
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.previous_track()
+        
+        return jsonify({"message": "Went to previous track"})
+        
+    except Exception as e:
+        print(f"Error going to previous track: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/seek', methods=['POST'])
+def seek_track():
+    """Seek to position in track"""
+    try:
+        data = request.get_json()
+        position_ms = data.get('position_ms', 0)
+        
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.seek_track(position_ms)
+        
+        return jsonify({"message": f"Seeked to {position_ms}ms"})
+        
+    except Exception as e:
+        print(f"Error seeking track: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/shuffle', methods=['POST'])
+def toggle_shuffle():
+    """Toggle shuffle mode"""
+    try:
+        data = request.get_json()
+        state = data.get('state', True)  # Default to True (enable shuffle)
+        
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.shuffle(state)
+        
+        return jsonify({"message": f"Shuffle {'enabled' if state else 'disabled'}"})
+        
+    except Exception as e:
+        print(f"Error toggling shuffle: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/repeat', methods=['POST'])
+def set_repeat_mode():
+    """Set repeat mode (off, track, context)"""
+    try:
+        data = request.get_json()
+        state = data.get('state', 'context')  # Default to context (repeat playlist)
+        
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        sp.repeat(state)
+        
+        return jsonify({"message": f"Repeat mode set to {state}"})
+        
+    except Exception as e:
+        print(f"Error setting repeat mode: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/playback/state', methods=['GET'])
+def get_playback_state():
+    """Get current playback state including shuffle and repeat modes"""
+    try:
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated"}), 401
+        
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        current = sp.current_playback()
+        
+        if not current:
+            return jsonify({
+                "shuffle_state": False,
+                "repeat_state": "off"
+            })
+        
+        return jsonify({
+            "shuffle_state": current.get('shuffle_state', False),
+            "repeat_state": current.get('repeat_state', 'off')
+        })
+        
+    except Exception as e:
+        print(f"Error getting playback state: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

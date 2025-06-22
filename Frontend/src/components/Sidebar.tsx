@@ -45,7 +45,7 @@ export default function Sidebar() {
       
       <div className="mt-auto pt-6 border-t border-gray-700">
         <div className="text-sm text-gray-400">
-          <p className="mb-1">Camera Detection: Active</p>
+          <p className="mb-16">Camera Detection: Active</p>
           <p>Auto-like feature: On</p>
         </div>
       </div>
