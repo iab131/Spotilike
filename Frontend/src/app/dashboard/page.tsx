@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import Sidebar from '@/components/Sidebar';
 import Player from '@/components/Player';
 import MoodPlaylist from '@/components/MoodPlaylist';
+import WebcamToggle from '@/components/WebcamToggle';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -13,7 +14,7 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [situation, setSituation] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysis, setAnalysis] = useState(null);
+  const [analysis, setAnalysis] = useState<{sentiment: string; keyword: string} | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
 
   // Check authentication status on component mount
@@ -140,6 +141,9 @@ export default function Dashboard() {
               </div>
             </div>
           </section>
+
+          {/* Webcam Mood Detection Toggle */}
+          <WebcamToggle />
 
           {/* Situation Input Section */}
           <section className="mb-8">

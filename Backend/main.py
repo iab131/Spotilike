@@ -139,6 +139,12 @@ def start_webcam():
         print("Webcam is already active")
         return
     
+    # Initialize database if not already done
+    if not mongo_manager:
+        if not initDB():
+            print("Failed to initialize database. Cannot start webcam.")
+            return
+    
     webcam_active = True
     webcam_thread = threading.Thread(target=webcam_emotion_detection, daemon=True)
     webcam_thread.start()
@@ -190,8 +196,26 @@ def webcam_emotion_detection():
                     # Update current emotion with thread safety
                     with emotion_lock:
                         current_emotion = detected_emotion
+                    
+                    # Check if there's a track playing and save emotion to database
+                    try:
+                        sp = auth()
+                        curr = getCurr(sp)
+                        if curr is not None:
+                            # Calculate score based on emotion
+                            score = 0
+                            if detected_emotion in positive_emotions:
+                                score = 1
+                            elif detected_emotion in negative_emotions:
+                                score = -1
+                            
+                            if score != 0:
+                                addDB(curr, score, detected_emotion)
+                                print(f"Saved emotion '{detected_emotion}' (score: {score}) for track {curr}")
+                    except Exception as e:
+                        print(f"Error saving emotion to database: {e}")
                         
-                    print(f"Detected emotion: {current_emotion}")
+                    print(f"Detected emotion: {detected_emotion}")
                     last_process_time = current_time
                 except Exception as e:
                     print(f"Error detecting emotion: {e}")

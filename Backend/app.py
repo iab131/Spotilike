@@ -125,6 +125,7 @@ def play_music():
 
 @app.route('/api/current-emotion', methods=['GET'])
 def get_current_emotion():
+    """Get the current detected emotion from webcam"""
     try:
         from main import get_current_emotion
         emotion = get_current_emotion()
@@ -355,6 +356,42 @@ def get_playback_state():
         
     except Exception as e:
         print(f"Error getting playback state: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/webcam/start', methods=['POST'])
+def start_webcam():
+    """Start webcam and emotion detection"""
+    try:
+        from main import start_webcam
+        start_webcam()
+        return jsonify({"message": "Webcam started for emotion detection"})
+    except Exception as e:
+        print(f"Error starting webcam: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/webcam/stop', methods=['POST'])
+def stop_webcam():
+    """Stop webcam and emotion detection"""
+    try:
+        from main import stop_webcam
+        stop_webcam()
+        return jsonify({"message": "Webcam stopped"})
+    except Exception as e:
+        print(f"Error stopping webcam: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/webcam/status', methods=['GET'])
+def get_webcam_status():
+    """Get current webcam and emotion detection status"""
+    try:
+        from main import webcam_active, get_current_emotion
+        emotion = get_current_emotion()
+        return jsonify({
+            "webcam_active": webcam_active,
+            "current_emotion": emotion
+        })
+    except Exception as e:
+        print(f"Error getting webcam status: {str(e)}")
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
