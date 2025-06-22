@@ -5,17 +5,8 @@ export default function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   
   return (
-    <header className="bg-spotify-gray p-4 flex items-center justify-between">
-      <div className="flex items-center space-x-4">
-        <button className="bg-black rounded-full p-2 opacity-70 hover:opacity-100">
-          <span className="sr-only">Back</span>
-          &lt;
-        </button>
-        <button className="bg-black rounded-full p-2 opacity-70 hover:opacity-100">
-          <span className="sr-only">Forward</span>
-          &gt;
-        </button>
-      </div>
+    <header className="bg-spotify-gray px-20 py-4 flex items-center justify-between">
+      <h1 className="text-2xl font-bold ">Spotilike</h1>
       
       
       <div className="flex items-center gap-4">
@@ -36,12 +27,7 @@ export default function Header() {
             📏
           </button>
         </div>
-        
-        <div className="border-l border-gray-700 pl-4 flex items-center gap-3">
-          <div className="w-8 h-8 bg-gray-700 rounded-full overflow-hidden flex items-center justify-center">
-            👤
-          </div>
-        </div>
+
       </div>
     </header>
   );

@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Header from '@/components/Header';
-import Sidebar from '@/components/Sidebar';
 import Player from '@/components/Player';
 import MoodPlaylist from '@/components/MoodPlaylist';
 import WebcamToggle from '@/components/WebcamToggle';
@@ -28,6 +27,23 @@ export default function Dashboard() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [enjoyedSongs, setEnjoyedSongs] = useState<EnjoyedSong[]>([]);
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  // Mock search categories
+  const searchCategories = [
+    { name: 'Happy', color: 'from-yellow-400 to-orange-500' },
+    { name: 'Chill', color: 'from-blue-400 to-indigo-500' },
+    { name: 'Focus', color: 'from-green-400 to-emerald-500' },
+    { name: 'Energetic', color: 'from-red-400 to-pink-500' },
+    { name: 'Sad', color: 'from-purple-400 to-violet-500' },
+    { name: 'Workout', color: 'from-orange-400 to-red-500' },
+    { name: 'Party', color: 'from-pink-400 to-purple-500' },
+    { name: 'Sleep', color: 'from-indigo-400 to-blue-500' },
+    { name: 'Ambient', color: 'from-teal-400 to-cyan-500' },
+    { name: 'Jazz', color: 'from-amber-400 to-yellow-500' },
+    { name: 'Focused', color: 'from-slate-400 to-gray-500' },
+    { name: 'Rap', color: 'from-gray-400 to-slate-500' },
+  ];
 
   // Check authentication status on component mount
   useEffect(() => {
@@ -212,12 +228,11 @@ export default function Dashboard() {
 
   return (
     <main className="flex h-screen bg-spotify-black text-white overflow-hidden">
-      <Sidebar />
       
       <div className="flex flex-col flex-grow overflow-hidden">
         <Header />
         
-        <div className="flex-grow px-8 py-6 overflow-y-auto pb-24">
+        <div className="flex-grow px-20 py-6 overflow-y-auto pb-24">
           <section className="mb-6">
             <div className="flex items-center">
               <div className="w-20 h-20 bg-gradient-to-br from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-4xl">
@@ -276,16 +291,18 @@ export default function Dashboard() {
             </div>
           </section>
           
-          <MoodPlaylist 
-            title="Your Most Reacted Songs" 
-            songs={mostReactedSongs}
-          />
+          <div className="mb-8">
+            <h2 className="text-xl font-bold mb-4">Browse by mood or feeling</h2>
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-6">
+              {searchCategories.map((category, index) => (
+                <div key={index} className={`p-5 rounded-lg bg-gradient-to-br ${category.color} hover:shadow-lg transition-shadow cursor-pointer`}>
+                  <h3 className="font-bold text-lg">{category.name}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
           
-          <MoodPlaylist 
-            title="Browse by Mood" 
-            songs={moodCategories}
-          />
-          
+
           <section className="mb-8">
             <h2 className="text-2xl font-bold mb-4">Songs You Enjoyed Most</h2>
             <div className="bg-spotify-light-gray bg-opacity-30 rounded-lg p-4">
