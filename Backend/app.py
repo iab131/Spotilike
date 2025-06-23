@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, redirect, url_for, session, Response
 from flask_cors import CORS
 from situation import analyze_text_sentiment_and_keyword, extract_json_from_response, play_multiple_songs_for_feeling_and_keyword
-from main import auth, initDB, getCurr, check_skip, addDB, get_current_emotion, start_webcam, stop_webcam, get_webcam_status as get_webcam_status_main, main as main_function
+from main import auth, initDB, getCurr, check_skip, addDB, get_current_emotion, start_webcam, stop_webcam, get_webcam_status as get_webcam_status_main, main as main_function, get_latest_distance_and_volume
 from mongoDB import MongoDBManager
 import os
 from dotenv import load_dotenv
@@ -438,18 +438,17 @@ def api_get_monitoring_status():
 
 @app.route('/api/enjoyed-songs', methods=['GET'])
 def get_enjoyed_songs():
-    """Get top 5 songs with total_score greater than 1 from database"""
+    """Get all songs from database"""
     try:
         # Initialize MongoDB connection
         mongo_manager = MongoDBManager()
         if not mongo_manager.connect():
             return jsonify({"error": "Database connection failed"}), 500
         
-        # Get top 5 songs with total_score > 1, sorted by total_score descending
+        # Get ALL songs (no filter, no limit)
         songs = mongo_manager.find_many(
-            filter_query={"total_score": {"$gt": 1}},
-            limit=5,
-            sort_by=("total_score", -1)
+            filter_query={},
+            limit=0  # 0 means no limit
         )
         
         if not songs:
@@ -464,14 +463,17 @@ def get_enjoyed_songs():
         
         sp = spotipy.Spotify(auth=token_info['access_token'])
         
-        # Get detailed track information from Spotify
+        # Get detailed track information from Spotify (in batches of 50)
         track_ids = [song['track_id'] for song in songs]
-        track_details = sp.tracks(track_ids)['tracks']
+        track_details = []
+        for i in range(0, len(track_ids), 50):
+            batch_ids = track_ids[i:i+50]
+            track_details.extend(sp.tracks(batch_ids)['tracks'])
         
         # Combine database data with Spotify data
         enjoyed_songs = []
         for i, song in enumerate(songs):
-            spotify_track = track_details[i]
+            spotify_track = track_details[i] if i < len(track_details) else None
             if spotify_track:
                 # Convert duration from ms to mm:ss format
                 duration_ms = spotify_track.get('duration_ms', 0)
@@ -496,7 +498,7 @@ def get_enjoyed_songs():
                     emotion_counts[emotion] = song.get(emotion_field, 0)
                 
                 # Get the emotion with the highest count
-                dominant_emotion = max(emotion_counts, key=emotion_counts.get)
+                dominant_emotion = max(emotion_counts, key=lambda k: emotion_counts[k])
                 
                 enjoyed_songs.append({
                     "track_id": song['track_id'],
@@ -509,11 +511,89 @@ def get_enjoyed_songs():
                     "emotion_breakdown": emotion_counts
                 })
         
+        # Sort by score descending
+        
         mongo_manager.disconnect()
         return jsonify({"songs": enjoyed_songs})
         
     except Exception as e:
         print(f"Error getting enjoyed songs: {str(e)}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/face-distance', methods=['GET'])
+def face_distance_api():
+    """Get the latest detected face distance and volume"""
+    try:
+        data = get_latest_distance_and_volume()
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/adjust-volume', methods=['POST'])
+def adjust_volume_api():
+    """Set the Spotify playback volume to the recommended value based on face distance."""
+    try:
+        data = get_latest_distance_and_volume()
+        recommended_volume = data.get('volume')
+        if recommended_volume is None:
+            return jsonify({"error": "No recommended volume available."}), 400
+        # Set Spotify playback volume
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated with Spotify"}), 401
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        # Get current playback device
+        playback = sp.current_playback()
+        device_id = None
+        if playback and playback.get('device'):
+            device_id = playback['device'].get('id')
+        if not device_id:
+            # Try to get the first available device
+            devices = sp.devices().get('devices', [])
+            if devices:
+                device_id = devices[0].get('id')
+        if not device_id:
+            return jsonify({"error": "No active Spotify device found."}), 400
+        # Spotify API expects volume_percent 0-100
+        sp.volume(recommended_volume, device_id=device_id)
+        print(f"[API] Set Spotify volume to: {recommended_volume} (device: {device_id})")
+        return jsonify({"message": f"Spotify volume set to {recommended_volume}", "volume": recommended_volume})
+    except Exception as e:
+        print(f"[API] Error setting Spotify volume: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/set-spotify-volume', methods=['POST'])
+def set_spotify_volume_api():
+    """Set the Spotify playback volume to a specific value from the frontend slider."""
+    try:
+        data = request.get_json()
+        volume = data.get('volume')
+        if volume is None or not isinstance(volume, (int, float)):
+            return jsonify({"error": "Missing or invalid volume value."}), 400
+        volume = int(max(0, min(100, volume)))
+        sp_oauth = create_spotify_oauth()
+        token_info = sp_oauth.get_cached_token()
+        if not token_info or sp_oauth.is_token_expired(token_info):
+            return jsonify({"error": "Not authenticated with Spotify"}), 401
+        sp = spotipy.Spotify(auth=token_info['access_token'])
+        # Get current playback device
+        playback = sp.current_playback()
+        device_id = None
+        if playback and playback.get('device'):
+            device_id = playback['device'].get('id')
+        if not device_id:
+            # Try to get the first available device
+            devices = sp.devices().get('devices', [])
+            if devices:
+                device_id = devices[0].get('id')
+        if not device_id:
+            return jsonify({"error": "No active Spotify device found."}), 400
+        sp.volume(volume, device_id=device_id)
+        print(f"[API] Set Spotify volume to: {volume} (device: {device_id}) via slider")
+        return jsonify({"message": f"Spotify volume set to {volume}", "volume": volume})
+    except Exception as e:
+        print(f"[API] Error setting Spotify volume via slider: {e}")
         return jsonify({"error": str(e)}), 500
 
 def notify_db_update():

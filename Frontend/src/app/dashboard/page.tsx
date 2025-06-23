@@ -22,6 +22,7 @@ interface EnjoyedSong {
   fear?: number;
   disgust?: number;
   neutral?: number;
+  emotion_breakdown: Record<string, number>;
 }
 
 
@@ -36,11 +37,13 @@ export default function Dashboard() {
   const [enjoyedSongs, setEnjoyedSongs] = useState<EnjoyedSong[]>([]);
   const [isLoadingSongs, setIsLoadingSongs] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
+  const [selectedMood, setSelectedMood] = useState<string>('overall');
   const [rankedSongs, setRankedSongs] = useState<EnjoyedSong[]>([]);
+  const [allSongs, setAllSongs] = useState<EnjoyedSong[]>([]);
   
   // Only keep these moods
   const searchCategories = [
+    { name: 'Overall', color: 'from-gray-700 to-gray-900', key: 'overall' },
     { name: 'Happy', color: 'from-yellow-400 to-orange-500', key: 'happy' },
     { name: 'Sad', color: 'from-purple-400 to-violet-500', key: 'sad' },
     { name: 'Angry', color: 'from-red-500 to-yellow-700', key: 'angry' },
@@ -101,6 +104,29 @@ export default function Dashboard() {
 
     return () => clearInterval(interval);
   }, [isAuthenticated]);
+
+  // Fetch all songs from backend (MongoDB) once
+  useEffect(() => {
+    const fetchAllSongs = async () => {
+      try {
+        const response = await fetch('http://localhost:5001/api/enjoyed-songs');
+        const data = await response.json();
+        if (Array.isArray(data.songs)) {
+          setAllSongs(data.songs);
+          // Set rankedSongs to overall by default
+          const sorted = data.songs.slice().sort((a: any, b: any) => Number(b.score ?? 0) - Number(a.score ?? 0));
+          setRankedSongs(sorted);
+        } else {
+          setAllSongs([]);
+          setRankedSongs([]);
+        }
+      } catch (error) {
+        setAllSongs([]);
+        setRankedSongs([]);
+      }
+    };
+    fetchAllSongs();
+  }, []);
 
   const checkAuthStatus = async () => {
     try {
@@ -205,35 +231,30 @@ export default function Dashboard() {
     return emotionMap[emotion.toLowerCase()] || '🎵';
   };
 
+  // Helper to safely get mood score
+  const getMoodScore = (song: EnjoyedSong, mood: string): number => {
+    // Type assertion to allow dynamic access
+    return typeof (song as any)[mood] === 'number' ? (song as any)[mood] : 0;
+  };
+
   // Handler for mood button click
-  const handleMoodClick = async (moodKey: string) => {
-    setSelectedMood(moodKey);
+  const handleMoodClick = (moodKey: string) => {
     setIsLoadingSongs(true);
-    try {
-      const response = await fetch('http://localhost:5001/api/enjoyed-songs');
-      const data = await response.json();
-      if (data.songs) {
-        const sorted = [...data.songs].sort((a, b) => {
-          // 1. Sort by mood score if available
-          if (typeof b[moodKey] === 'number' && typeof a[moodKey] === 'number') {
-            return b[moodKey] - a[moodKey];
-          }
-          // 2. Prioritize songs whose main emotion matches the mood
-          if (b.emotion === moodKey && a.emotion !== moodKey) return -1;
-          if (a.emotion === moodKey && b.emotion !== moodKey) return 1;
-          // 3. Fallback: sort by generic score
-          return (b.score || 0) - (a.score || 0);
-        });
-        setRankedSongs(sorted);
-      } else {
-        setRankedSongs([]);
-      }
-    } catch (error) {
-      console.error(error);
-      setRankedSongs([]);
-    } finally {
+    const lowerMoodKey = moodKey.toLowerCase();
+    setSelectedMood(lowerMoodKey);
+    if (lowerMoodKey === 'overall') {
+      // Sort all songs by overall score (song.score), include all songs
+      const sorted = allSongs.slice().sort((a: any, b: any) => Number(b.score ?? 0) - Number(a.score ?? 0));
+      setRankedSongs(sorted);
+      console.log(allSongs);
       setIsLoadingSongs(false);
+      return;
     }
+    // Use emotion_breakdown for filtering and sorting
+    const filtered = allSongs.filter((song: any) => Number(song.emotion_breakdown?.[lowerMoodKey] ?? 0) > 0);
+    const sorted = filtered.sort((a: any, b: any) => Number(b.emotion_breakdown?.[lowerMoodKey] ?? 0) - Number(a.emotion_breakdown?.[lowerMoodKey] ?? 0));
+    setRankedSongs(sorted);
+    setIsLoadingSongs(false);
   };
 
   if (isLoading) {
@@ -247,23 +268,6 @@ export default function Dashboard() {
   if (!isAuthenticated) {
     return null; // Will redirect to login
   }
-
-  // Mock data for demonstration
-  const mostReactedSongs = [
-    { title: 'Happy Vibes', artist: 'Good Mood', },
-    { title: 'Upbeat Tempo', artist: 'Feel Good Inc', },
-    { title: 'Energy Boost', artist: 'Positive Vibes', },
-    { title: 'Sunshine Melody', artist: 'Happy Days', },
-    { title: 'Dance Moves', artist: 'Groove Master', },
-  ];
-
-  const moodCategories = [
-    { title: 'Calm', artist: 'Relaxing Playlist', },
-    { title: 'Energetic', artist: 'Workout Mix', },
-    { title: 'Focus', artist: 'Concentration', },
-    { title: 'Throwbacks', artist: 'Nostalgia', },
-    { title: 'Rap', artist: 'Hip Hop Collection', },
-  ];
 
   return (
     <main className="flex h-screen bg-spotify-black text-white overflow-hidden">
@@ -366,14 +370,14 @@ export default function Dashboard() {
                       <tr>
                         <th className="pb-3 font-normal">#</th>
                         <th className="pb-3 font-normal">TITLE</th>
-                        <th className="pb-3 font-normal">SCORE</th>
+                        <th className="pb-3 font-normal">YOUR REACTION</th>
                         <th className="pb-3 font-normal">ARTIST</th>
                         <th className="pb-3 font-normal">DURATION</th>
                       </tr>
                     </thead>
                     <tbody>
                       {rankedSongs.map((song, index) => (
-                        <tr key={song.track_id} className="hover:bg-white hover:bg-opacity-10">
+                        <tr key={song.track_id || `${song.title}-${index}` } className="hover:bg-white hover:bg-opacity-10">
                           <td className="py-3">{index + 1}</td>
                           <td className="py-3">
                             <div className="flex items-center">
@@ -389,11 +393,17 @@ export default function Dashboard() {
                               )}
                               <div>
                                 <div className="font-medium">{song?.title || 'Unknown Title'}</div>
-                                <div className="text-sm text-gray-400">Score: {song[selectedMood] || 0}</div>
+                                <div className="text-sm text-gray-400">
+                                  Score: {selectedMood === 'overall' ? (song.score || 0) : (song.emotion_breakdown?.[selectedMood!] ?? 0)}
+                                </div>
                               </div>
                             </div>
                           </td>
-                          <td className="py-3">{song[selectedMood] || 0}</td>
+                          <td className="py-3">
+                            <span className="text-lg" title={selectedMood === 'overall' ? song.emotion : selectedMood}>
+                              {getEmotionEmoji(selectedMood === 'overall' ? song.emotion : selectedMood!)}
+                            </span>
+                          </td>
                           <td className="py-3">{song?.artist || 'Unknown Artist'}</td>
                           <td className="py-3">{song?.duration || '0:00'}</td>
                         </tr>

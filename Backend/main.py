@@ -24,6 +24,10 @@ webcam_thread = None
 current_emotion = None
 emotion_lock = threading.Lock()
 
+# Add globals for distance and volume
+latest_face_distance = None
+latest_face_volume = None
+
 # Define all possible emotions
 all_emotions = ['happy', 'sad', 'angry', 'surprise', 'fear', 'disgust', 'neutral', 'skipped']
 positive_emotions = ['happy']
@@ -189,7 +193,7 @@ def stop_webcam():
 
 def webcam_emotion_detection():
     """Function to run in a thread for continuous emotion detection"""
-    global webcam_active, current_emotion
+    global webcam_active, current_emotion, latest_face_distance, latest_face_volume
     
     try:
         cap = cv2.VideoCapture(0)
@@ -228,7 +232,21 @@ def webcam_emotion_detection():
                     with emotion_lock:
                         current_emotion = detected_emotion
                     
-                    print(f"😊 Detected emotion: {detected_emotion}")
+                    # --- Distance and Volume Calculation ---
+                    # Use DeepFace.extract_faces to get face width
+                    faces = DeepFace.extract_faces(frame, detector_backend='opencv')
+                    if faces and len(faces) > 0:
+                        w = faces[0]['facial_area']['w']
+                        from FaceModel.realtime_recognition import calculate_distance, map_distance_to_volume
+                        distance = calculate_distance(w)
+                        volume = map_distance_to_volume(distance)
+                        latest_face_distance = distance
+                        latest_face_volume = volume
+                        print(f"😊 Detected emotion: {detected_emotion}, Distance: {distance:.2f} cm, Volume: {volume}")
+                    else:
+                        latest_face_distance = None
+                        latest_face_volume = None
+                    
                     last_process_time = current_time
                 except Exception as e:
                     print(f"Error detecting emotion: {e}")
@@ -255,6 +273,13 @@ def get_webcam_status():
             "webcam_active": webcam_active,
             "current_emotion": current_emotion
         }
+
+def get_latest_distance_and_volume():
+    global latest_face_distance, latest_face_volume
+    return {
+        "distance_cm": latest_face_distance,
+        "volume": latest_face_volume
+    }
 
 def runModel():
     """
